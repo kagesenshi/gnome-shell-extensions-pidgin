@@ -96,6 +96,8 @@ Source.prototype = {
         let proxy = client.proxy();
         this._client = client;
         this._author = author;
+        this._authors = {};
+        this._authors[author] = true;
         this._account = account;
         this._conversation = conversation;
         this._chat = chat;
@@ -307,8 +309,19 @@ Source.prototype = {
     },
 
     _onDisplayedChatMessage: function(emitter, account, author, text, conversation, flag) {
-        // discard the "nick present" field for chat notifications
-        this._onDisplayedImMessage(emitter, account, author, text, conversation, flag & ~32);
+
+        if (text && (this._conversation == conversation) && (flag & 3) == 2) {
+            // accept messages from people who sent us something with our nick in it
+            if ((flag & 32) == 32) {
+                this._authors[author] = true;
+            }
+            if (author in this._authors) {
+                let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.RECEIVED);
+                this._notification.appendMessage(message, false);
+                this.notify();
+            }
+        }
+
     },
 
     _onDisplayedImMessage: function(emitter, account, author, text, conversation, flag) {
