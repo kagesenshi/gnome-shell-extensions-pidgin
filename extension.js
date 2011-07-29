@@ -79,8 +79,7 @@ Source.prototype = {
         this._notification.setUrgency(MessageTray.Urgency.HIGH);
         this._notification.enableScrolling(true);
 
-
-        proxy.PurpleFindBuddyRemote(account, author, Lang.bind(this, this._async_set_author_buddy))
+        proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
     },
 
     _async_set_author_buddy: function (author_buddy) {
@@ -92,13 +91,13 @@ Source.prototype = {
     _async_set_conversation_im: function (conversation_im) {
         let proxy = this._client.proxy();
         this._conversation_im = conversation_im;
-        proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
+        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
     },
 
     _async_set_title: function (title) {
         let proxy = this._client.proxy();
         this.title = _fixText(title);
-        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
+        proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
     },
 
     _async_get_icon: function (iconobj) {
@@ -150,8 +149,7 @@ Source.prototype = {
         proxy.disconnect(this._buddySignedOffId);
         proxy.disconnect(this._buddySignedOnId);
         proxy.disconnect(this._deleteConversationId);
-        proxy.disconnect(this._messageSentId);
-        proxy.disconnect(this._messageReceivedId);
+        proxy.disconnect(this._messageDisplayedId);
         MessageTray.Source.prototype.destroy.call(this);
     },
     
