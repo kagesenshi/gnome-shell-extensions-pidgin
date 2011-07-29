@@ -56,20 +56,21 @@ PidginNotification.prototype = {
     }
 }
 
-function Source(client, account, author, initialMessage, conversation, flag) {
-    this._init(client, account, author, initialMessage, conversation, flag);
+function Source(client, account, author, initialMessage, conversation, chat, flag) {
+    this._init(client, account, author, initialMessage, conversation, chat, flag);
 }
 
 Source.prototype = {
     __proto__: MessageTray.Source.prototype,
 
-    _init: function(client, account, author, initialMessage, conversation, flag) {
+    _init: function(client, account, author, initialMessage, conversation, chat, flag) {
 
         let proxy = client.proxy();
         this._client = client;
         this._author = author;
         this._account = account;
         this._conversation = conversation;
+        this._chat = chat;
         this._initialMessage = initialMessage;
         this._initialFlag = flag;
         this._iconUri = null;
@@ -349,7 +350,7 @@ PidginClient.prototype = {
         if (conversation) {
             let source = this._sources[conversation];
             if (!source) {
-                source = new Source(this, account, author, message, conversation, flag);
+                source = new Source(this, account, author, message, conversation, false, flag);
                 source.connect('destroy', Lang.bind(this, 
                     function() {
                         delete this._sources[conversation];
