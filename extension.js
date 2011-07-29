@@ -25,6 +25,7 @@ function wrappedText(text, sender, timestamp, direction) {
     if (timestamp == null) {
         timestamp = currentTime;
     };
+
     return {
         text: text,
         sender: sender,
@@ -61,7 +62,7 @@ function PidginChatNotification(source) {
 }
 
 PidginChatNotification.prototype = {
-    __proto__: PidginNotification.prototype,
+    __proto__: TelepathyClient.Notification.prototype,
 
     // monkey-patched from TelepathyClient.Notification
     _init: function(source) {
@@ -80,6 +81,21 @@ PidginChatNotification.prototype = {
 
         this._history = [];
         this._timestampTimeoutId = 0;
+    },
+
+    appendMessage: function(message, noTimestamp, styles) {
+        let senderAlias = GLib.markup_escape_text(message.sender, -1);
+        let messageBody = '<i>' + senderAlias + '</i> ';
+        styles = styles || [];
+        styles.push(message.direction);
+        if (message.text.slice(0, 4) == '/me ') {
+            styles.push('chat-action');
+            messageBody = '* ' + messageBody + _fixText(message.text.slice(4));
+        } else {
+            messageBody = messageBody + _fixText(message.text);
+        }
+        this.update(this.source.title, messageBody, { customContent: true, bannerMarkup: true });
+        this._append(messageBody, styles, message.timestamp, noTimestamp);
     }
 
 }
