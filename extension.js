@@ -237,8 +237,15 @@ Source.prototype = {
     },
 
     notify: function () {
-        MessageTray.Source.prototype.notify.call(this, this._notification);
-        this._notification.scrollTo(St.Side.BOTTOM);
+        let proxy = this._client.proxy();
+        proxy.PurpleConversationHasFocusRemote(this._conversation, Lang.bind(this, this._async_notify));
+    },
+
+    _async_notify: function (stats) {
+        if (!stats) {
+            MessageTray.Source.prototype.notify.call(this, this._notification);
+            this._notification.scrollTo(St.Side.BOTTOM);
+        }
     },
 
     respond: function(text) {
@@ -388,6 +395,7 @@ const PidginIface = {
         {name: 'PurpleConversationGetMessageHistory', inSignature: 'i', outSignature: 'ai'},
         {name: 'PurpleConversationMessageGetMessage', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleConversationGetTitle', inSignature: 'i', outSignature: 's'},
+        {name: 'PurpleConversationHasFocus', inSignature: 'i', outSignature: 'b'}
     ],
     signals: [
         {name: 'ReceivedImMsg', inSignature: 'issiu'},
