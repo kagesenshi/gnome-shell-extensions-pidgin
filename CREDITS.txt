@@ -1,0 +1,6 @@
+okin:
+ - fix for making extension work in all gnome-shell 3.0.x releases
+
+bonzini:
+ - notification for IRC chat
+

@@ -1,0 +1,7 @@
+
+0.1.1 (unreleased)
+-------------------
+
+ * IRC Chat notification (bonzini)
+ * Notification now doesnt popup if conversation has focus (kagesenshi)
+
