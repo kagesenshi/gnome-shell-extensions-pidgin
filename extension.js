@@ -64,25 +64,6 @@ function PidginChatNotification(source) {
 PidginChatNotification.prototype = {
     __proto__: TelepathyClient.Notification.prototype,
 
-    // monkey-patched from TelepathyClient.Notification
-    _init: function(source) {
-        MessageTray.Notification.prototype._init.call(this, source, source.title, null, { customContent: true });
-        this.setResident(true);
-
-        this._oldMaxScrollAdjustment = 0;
-        this._createScrollArea();
-
-        this._scrollArea.vscroll.adjustment.connect('changed', Lang.bind(this, function(adjustment) {
-            let currentValue = adjustment.value + adjustment.page_size;
-            if (currentValue == this._oldMaxScrollAdjustment)
-                this.scrollTo(St.Side.BOTTOM);
-            this._oldMaxScrollAdjustment = adjustment.upper;
-        }));
-
-        this._history = [];
-        this._timestampTimeoutId = 0;
-    },
-
     appendMessage: function(message, noTimestamp, styles) {
         let senderAlias = GLib.markup_escape_text(message.sender, -1);
         let messageBody = '<i>' + senderAlias + '</i> ';
