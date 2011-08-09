@@ -79,7 +79,7 @@ PidginChatNotification.prototype = {
 
         this._history = [];
         this._timestampTimeoutId = 0;
-    }
+    },
 
     appendMessage: function(message, noTimestamp, styles) {
         let senderAlias = GLib.markup_escape_text(message.sender, -1);
