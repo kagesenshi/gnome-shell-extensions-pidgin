@@ -16,18 +16,28 @@ const Main = imports.ui.main;
 const MessageTray = imports.ui.messageTray;
 const Shell = imports.gi.Shell;
 const TelepathyClient = imports.ui.telepathyClient;
+const Tp = imports.gi.TelepathyGLib;
 
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
 
 function wrappedText(text, sender, timestamp, direction) {
     let currentTime = (Date.now() / 1000);
+	let type = Tp.ChannelTextMessageType.NORMAL;
+
     if (timestamp == null) {
         timestamp = currentTime;
-    };
+    }
+	
+	text = _fixText(text);
+	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
+		text = text.substr(4);
+		type = Tp.ChannelTextMessageType.ACTION;
+	}
 
     return {
         text: text,
+		messageType: type,
         sender: sender,
         timestamp: timestamp,
         direction: direction
@@ -46,15 +56,7 @@ function _fixText(text) {
 }
 
 PidginNotification.prototype = {
-    __proto__: TelepathyClient.ChatNotification.prototype,
-
-    appendMessage: function(message, noTimestamp, styles) {
-        let messageBody = _fixText(message.text);
-        styles = styles || [];
-        styles.push(message.direction);
-        this.update(this.source.title, messageBody, { customContent: true, bannerMarkup: true });
-        this._append(messageBody, styles, message.timestamp, noTimestamp);
-    }
+    __proto__: TelepathyClient.ChatNotification.prototype
 }
 
 function PidginChatNotification(source) {
@@ -62,40 +64,7 @@ function PidginChatNotification(source) {
 }
 
 PidginChatNotification.prototype = {
-    __proto__: TelepathyClient.ChatNotification.prototype,
-
-    // monkey-patched from TelepathyClient.Notification
-    _init: function(source) {
-        MessageTray.Notification.prototype._init.call(this, source, source.title, null, { customContent: true });
-        this.setResident(true);
-        this._oldMaxScrollAdjustment = 0;
-        this._createScrollArea();
-        this._scrollArea.vscroll.adjustment.connect('changed', Lang.bind(this, function(adjustment) {
-            let currentValue = adjustment.value + adjustment.page_size;
-            if (currentValue == this._oldMaxScrollAdjustment)
-                this.scrollTo(St.Side.BOTTOM);
-            this._oldMaxScrollAdjustment = adjustment.upper;
-        }));
-
-        this._history = [];
-        this._timestampTimeoutId = 0;
-    },
-
-    appendMessage: function(message, noTimestamp, styles) {
-        let senderAlias = GLib.markup_escape_text(message.sender, -1);
-        let messageBody = '<i>' + senderAlias + '</i> ';
-        styles = styles || [];
-        styles.push(message.direction);
-        if (message.text.slice(0, 4) == '/me ') {
-            styles.push('chat-action');
-            messageBody = '* ' + messageBody + _fixText(message.text.slice(4));
-        } else {
-            messageBody = messageBody + _fixText(message.text);
-        }
-        this.update(this.source.title, messageBody, { customContent: true, bannerMarkup: true });
-        this._append(messageBody, styles, message.timestamp, noTimestamp);
-    }
-
+    __proto__: TelepathyClient.ChatNotification.prototype
 }
 
 function Source(client, account, author, initialMessage, conversation, chat, flag) {
@@ -478,6 +447,5 @@ function enable() {
 }
 
 function disable() {
-	_pidginClient.destroy();
 	_pidingClient = null;
 }
