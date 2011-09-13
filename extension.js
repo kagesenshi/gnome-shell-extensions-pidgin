@@ -211,7 +211,7 @@ Source.prototype = {
     _async_notify: function (stats) {
         if (!stats) {
             MessageTray.Source.prototype.notify.call(this, this._notification);
-/*            this._notification.scrollTo(St.Side.BOTTOM);*/
+            this._notification.scrollTo(St.Side.BOTTOM);
         }
     },
 
@@ -419,7 +419,7 @@ PidginClient.prototype = {
     _messageDisplayed: function(emitter, account, author, message, conversation, flag) {
 
         // only trigger on message received/message sent
-        if (flag != 2) return;
+        if (flag != 2 && flag != 1) return;
 
         if (conversation) {
             let source = this._sources[conversation];
