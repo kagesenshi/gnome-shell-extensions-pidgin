@@ -46,7 +46,7 @@ function _fixText(text) {
 }
 
 PidginNotification.prototype = {
-    __proto__: TelepathyClient.Notification.prototype,
+    __proto__: TelepathyClient.ChatNotification.prototype,
 
     appendMessage: function(message, noTimestamp, styles) {
         let messageBody = _fixText(message.text);
@@ -62,7 +62,7 @@ function PidginChatNotification(source) {
 }
 
 PidginChatNotification.prototype = {
-    __proto__: TelepathyClient.Notification.prototype,
+    __proto__: TelepathyClient.ChatNotification.prototype,
 
     // monkey-patched from TelepathyClient.Notification
     _init: function(source) {
@@ -467,8 +467,17 @@ PidginClient.prototype = {
     }
 }
 
+let _pidginClient = null;
 
-function main(metadata) {
+function init(metadata) {
     imports.gettext.bindtextdomain('gnome-shell-extensions', metadata.localedir);
-    let client = new PidginClient();
+}
+
+function enable() {
+    _pidginClient = new PidginClient();
+}
+
+function disable() {
+	_pidginClient.destroy();
+	_pidingClient = null;
 }
