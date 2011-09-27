@@ -101,6 +101,7 @@ Source.prototype = {
         this._notification.enableScrolling(true);
 
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
+        if (chat) proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_im));
     },
 
     _async_set_author_buddy: function (author_buddy) {
@@ -221,7 +222,12 @@ Source.prototype = {
     respond: function(text) {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
-        proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        if(this._chat){
+        	proxy.PurpleConvChatSendRemote(this._conversation_im, _text);
+        }
+        else{
+        	proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        }
     },
 
     _onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
