@@ -21,7 +21,7 @@ const Tp = imports.gi.TelepathyGLib;
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
 
-function wrappedText(text, sender, timestamp, direction) {
+function wrappedText(text, sender, timestamp, direction, chat) {
     let currentTime = (Date.now() / 1000);
 	let type = Tp.ChannelTextMessageType.NORMAL;
 
@@ -30,6 +30,9 @@ function wrappedText(text, sender, timestamp, direction) {
     }
 	
 	text = _fixText(text);
+	if (chat){
+		text = sender + ": " + text;
+	}
 	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
 		text = text.substr(4);
 		type = Tp.ChannelTextMessageType.ACTION;
@@ -153,7 +156,7 @@ Source.prototype = {
             direction = TelepathyClient.NotificationDirection.RECEIVED;
         }
 
-        let message = wrappedText(this._initialMessage, this._author, null, direction);
+        let message = wrappedText(this._initialMessage, this._author, null, direction, this._chat);
         this._notification.appendMessage(message, false);
 
         if (this._chat) {
@@ -355,7 +358,9 @@ const PidginIface = {
         {name: 'PurpleBuddyIconGetFullPath', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleBuddyGetIcon', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConvImSend', inSignature: 'is', outSignature: ''},
+        {name: 'PurpleConvChatSend', inSignature: 'is', outSignature: ''},
         {name: 'PurpleConvIm', inSignature: 'i', outSignature: 'i'},
+        {name: 'PurpleConvChat', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConvImGetIcon', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConversationGetName', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleConversationGetAccount', inSignature: 'i', outSignature: 's'},
