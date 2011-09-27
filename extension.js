@@ -30,7 +30,7 @@ function wrappedText(text, sender, timestamp, direction, chat) {
     }
 	
 	text = _fixText(text);
-	if (chat){
+	if (chat && direction != TelepathyClient.NotificationDirection.SENT){
 		text = sender + ": " + text;
 	}
 	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
@@ -156,7 +156,7 @@ Source.prototype = {
         } else if (this._initialFlag == 2) {
             direction = TelepathyClient.NotificationDirection.RECEIVED;
         }
-
+        
         let message = wrappedText(this._initialMessage, this._author, null, direction, this._chat);
         this._notification.appendMessage(message, false);
 
@@ -308,17 +308,22 @@ Source.prototype = {
     },
 
     _onDisplayedChatMessage: function(emitter, account, author, text, conversation, flag) {
-    	
+    	global.log(flag);
         if (text && (this._conversation == conversation) && (flag & 3) == 2) {
             // accept messages from people who sent us something with our nick in it
             if ((flag & 32) == 32) {
                 this._authors[author] = true;
             }
             if (author in this._authors) {
-                let message = wrappedText(author + ": " + text, author, null, TelepathyClient.NotificationDirection.RECEIVED);
+                let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.RECEIVED, this._chat);
                 this._notification.appendMessage(message, false);
                 this.notify();
             }
+        }
+        else if(flag == 1){
+            let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.SENT, this._chat);
+            this._notification.appendMessage(message, false);
+            this.notify();
         }
 
     },
