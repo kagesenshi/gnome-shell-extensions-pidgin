@@ -308,14 +308,14 @@ Source.prototype = {
     },
 
     _onDisplayedChatMessage: function(emitter, account, author, text, conversation, flag) {
-
+    	
         if (text && (this._conversation == conversation) && (flag & 3) == 2) {
             // accept messages from people who sent us something with our nick in it
             if ((flag & 32) == 32) {
                 this._authors[author] = true;
             }
             if (author in this._authors) {
-                let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.RECEIVED);
+                let message = wrappedText(author + ": " + text, author, null, TelepathyClient.NotificationDirection.RECEIVED);
                 this._notification.appendMessage(message, false);
                 this.notify();
             }
