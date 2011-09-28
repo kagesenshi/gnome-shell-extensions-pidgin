@@ -21,7 +21,7 @@ const Tp = imports.gi.TelepathyGLib;
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
 
-function wrappedText(text, sender, timestamp, direction) {
+function wrappedText(text, sender, timestamp, direction, chat) {
     let currentTime = (Date.now() / 1000);
 	let type = Tp.ChannelTextMessageType.NORMAL;
 
@@ -30,6 +30,9 @@ function wrappedText(text, sender, timestamp, direction) {
     }
 	
 	text = _fixText(text);
+	if (chat && direction != TelepathyClient.NotificationDirection.SENT){
+		text = sender + ": " + text;
+	}
 	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
 		text = text.substr(4);
 		type = Tp.ChannelTextMessageType.ACTION;
@@ -98,6 +101,7 @@ Source.prototype = {
         this._notification.enableScrolling(true);
 
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
+        if (chat) proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_im));
     },
 
     _async_set_author_buddy: function (author_buddy) {
@@ -152,8 +156,8 @@ Source.prototype = {
         } else if (this._initialFlag == 2) {
             direction = TelepathyClient.NotificationDirection.RECEIVED;
         }
-
-        let message = wrappedText(this._initialMessage, this._author, null, direction);
+        
+        let message = wrappedText(this._initialMessage, this._author, null, direction, this._chat);
         this._notification.appendMessage(message, false);
 
         if (this._chat) {
@@ -218,7 +222,12 @@ Source.prototype = {
     respond: function(text) {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
-        proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        if(this._chat){
+        	proxy.PurpleConvChatSendRemote(this._conversation_im, _text);
+        }
+        else{
+        	proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        }
     },
 
     _onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
@@ -299,17 +308,22 @@ Source.prototype = {
     },
 
     _onDisplayedChatMessage: function(emitter, account, author, text, conversation, flag) {
-
+    	global.log(flag);
         if (text && (this._conversation == conversation) && (flag & 3) == 2) {
             // accept messages from people who sent us something with our nick in it
             if ((flag & 32) == 32) {
                 this._authors[author] = true;
             }
             if (author in this._authors) {
-                let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.RECEIVED);
+                let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.RECEIVED, this._chat);
                 this._notification.appendMessage(message, false);
                 this.notify();
             }
+        }
+        else if(flag == 1){
+            let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.SENT, this._chat);
+            this._notification.appendMessage(message, false);
+            this.notify();
         }
 
     },
@@ -355,7 +369,9 @@ const PidginIface = {
         {name: 'PurpleBuddyIconGetFullPath', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleBuddyGetIcon', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConvImSend', inSignature: 'is', outSignature: ''},
+        {name: 'PurpleConvChatSend', inSignature: 'is', outSignature: ''},
         {name: 'PurpleConvIm', inSignature: 'i', outSignature: 'i'},
+        {name: 'PurpleConvChat', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConvImGetIcon', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConversationGetName', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleConversationGetAccount', inSignature: 'i', outSignature: 's'},
