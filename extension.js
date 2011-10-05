@@ -405,8 +405,30 @@ PidginClient.prototype = {
     _init: function() {
         this._sources = {};
         this._proxy = new Pidgin(DBus.session, 'im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject');
-        this._proxy.connect('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
-        this._proxy.connect('DisplayedChatMsg', Lang.bind(this, this._chatMessageDisplayed));
+        this._displayedImMsgId = 0;
+        this._displayedChatMsgId = 0;
+    },
+
+    enable: function() {
+        this._displayedImMsgId = this._proxy.connect('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
+        this._displayedChatMsgId = this._proxy.connect('DisplayedChatMsg', Lang.bind(this, this._chatMessageDisplayed));        
+    },
+    
+    disable: function() {
+        if (this._displayedImMsgId > 0) {
+            this._proxy.disconnect(this._displayedImMsgId);
+            this._displayedImMsgId = 0;
+        }
+        
+        if (this._displayedChatMsgId > 0) {
+            this._proxy.disconnect(this._displayedChatMsgId);
+            this._displayedChatMsgId = 0;
+        }
+        
+        for (let key in this._sources) {
+            if (this._sources.hasOwnProperty(key))
+                this._sources[key].destroy();
+        }
     },
 
     proxy: function () {
@@ -452,16 +474,7 @@ PidginClient.prototype = {
     }
 }
 
-let _pidginClient = null;
-
 function init(metadata) {
     imports.gettext.bindtextdomain('gnome-shell-extensions', metadata.localedir);
-}
-
-function enable() {
-    _pidginClient = new PidginClient();
-}
-
-function disable() {
-	_pidingClient = null;
+    return new PidginClient();
 }
