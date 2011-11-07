@@ -191,7 +191,7 @@ const Tp = imports.gi.TelepathyGLib;
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
 
-function wrappedText(text, sender, timestamp, direction, chat) {
+function wrappedText(text, sender, timestamp, direction) {
     let currentTime = (Date.now() / 1000);
 	let type = Tp.ChannelTextMessageType.NORMAL;
 
@@ -200,9 +200,6 @@ function wrappedText(text, sender, timestamp, direction, chat) {
     }
 	
 	text = _fixText(text);
-	if (chat && direction != TelepathyClient.NotificationDirection.SENT){
-		text = sender + ": " + text;
-	}
 	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
 		text = text.substr(4);
 		type = Tp.ChannelTextMessageType.ACTION;
@@ -218,19 +215,11 @@ function wrappedText(text, sender, timestamp, direction, chat) {
 }
 
 
-function PidginNotification(source) {
-    this._init(source);
-}
-
 function _fixText(text) {
     // remove all tags
     let _text = html_entity_decode(text.replace(/<\/?[^>]+(>|$)/g, ""));
     _text = _text.replace('&apos;', '\''); // Gets past html_entity_decode somehow.
     return _text;
-}
-
-PidginNotification.prototype = {
-    __proto__: TelepathyClient.ChatNotification.prototype
 }
 
 function PidginChatNotification(source) {
@@ -241,14 +230,14 @@ PidginChatNotification.prototype = {
     __proto__: TelepathyClient.ChatNotification.prototype
 }
 
-function Source(client, account, author, initialMessage, conversation, chat, flag) {
-    this._init(client, account, author, initialMessage, conversation, chat, flag);
+function Source(client, account, author, initialMessage, conversation, flag) {
+    this._init(client, account, author, initialMessage, conversation, flag);
 }
 
 Source.prototype = {
     __proto__: MessageTray.Source.prototype,
 
-    _init: function(client, account, author, initialMessage, conversation, chat, flag) {
+    _init: function(client, account, author, initialMessage, conversation, flag) {
 
         let proxy = client.proxy();
         this._client = client;
@@ -257,22 +246,15 @@ Source.prototype = {
         this._authors[author] = true;
         this._account = account;
         this._conversation = conversation;
-        this._chat = chat;
         this._initialMessage = initialMessage;
         this._initialFlag = flag;
         this._iconUri = null;
         this._presence = 'online';
         this.isChat = true;
-        if (chat) {
-            this._notification = new PidginChatNotification(this);
-        } else {
-            this._notification = new PidginNotification(this);
-        }
+        this._notification = new PidginChatNotification(this);
         this._notification.setUrgency(MessageTray.Urgency.HIGH);
         this._notification.enableScrolling(true);
-
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
-        if (chat) proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_im));
     },
 
     _async_set_author_buddy: function (author_buddy) {
@@ -290,11 +272,7 @@ Source.prototype = {
     _async_set_title: function (title) {
         let proxy = this._client.proxy();
         this.title = _fixText(title);
-        if (!this._chat) {
-            proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
-        } else {
-            this._start();
-        }
+        proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
     },
 
     _async_get_icon: function (iconobj) {
@@ -328,17 +306,13 @@ Source.prototype = {
             direction = TelepathyClient.NotificationDirection.RECEIVED;
         }
         
-        let message = wrappedText(this._initialMessage, this._author, null, direction, this._chat);
+        let message = wrappedText(this._initialMessage, this._author, null, direction);
         this._notification.appendMessage(message, false);
 
-        if (this._chat) {
-            this._messageDisplayedId = proxy.connect('DisplayedChatMsg', Lang.bind(this, this._onDisplayedChatMessage));
-        } else {
-            this._buddyStatusChangeId = proxy.connect('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
-            this._buddySignedOffId = proxy.connect('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
-            this._buddySignedOnId = proxy.connect('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
-            this._messageDisplayedId = proxy.connect('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
-        }
+        this._buddyStatusChangeId = proxy.connect('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
+        this._buddySignedOffId = proxy.connect('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
+        this._buddySignedOnId = proxy.connect('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
+        this._messageDisplayedId = proxy.connect('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
         this._deleteConversationId = proxy.connect('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
 
         this.notify();
@@ -373,9 +347,6 @@ Source.prototype = {
     open: function(notification) {
         let app = Shell.AppSystem.get_default().get_app('pidgin.desktop');
         app.activate_window(null, global.get_current_time());
-        if (this._chat) {
-            this.destroy();
-        }
     },
 
     notify: function () {
@@ -393,12 +364,7 @@ Source.prototype = {
     respond: function(text) {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
-        if(this._chat){
-        	proxy.PurpleConvChatSendRemote(this._conversation_im, _text);
-        }
-        else{
-        	proxy.PurpleConvImSendRemote(this._conversation_im, _text);
-        }
+        proxy.PurpleConvImSendRemote(this._conversation_im, _text);
     },
 
     _onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
@@ -476,27 +442,6 @@ Source.prototype = {
     _onDeleteConversation: function(emitter, conversation) {
         if (conversation != this._conversation) return;
         this.destroy();
-    },
-
-    _onDisplayedChatMessage: function(emitter, account, author, text, conversation, flag) {
-    	global.log(flag);
-        if (text && (this._conversation == conversation) && (flag & 3) == 2) {
-            // accept messages from people who sent us something with our nick in it
-            if ((flag & 32) == 32) {
-                this._authors[author] = true;
-            }
-            if (author in this._authors) {
-                let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.RECEIVED, this._chat);
-                this._notification.appendMessage(message, false);
-                this.notify();
-            }
-        }
-        else if(flag == 1){
-            let message = wrappedText(text, author, null, TelepathyClient.NotificationDirection.SENT, this._chat);
-            this._notification.appendMessage(message, false);
-            this.notify();
-        }
-
     },
 
     _onDisplayedImMessage: function(emitter, account, author, text, conversation, flag) {
@@ -582,7 +527,6 @@ PidginClient.prototype = {
 
     enable: function() {
         this._displayedImMsgId = this._proxy.connect('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
-        this._displayedChatMsgId = this._proxy.connect('DisplayedChatMsg', Lang.bind(this, this._chatMessageDisplayed));        
     },
     
     disable: function() {
@@ -606,34 +550,14 @@ PidginClient.prototype = {
         return this._proxy;
     },
 
-    _chatMessageDisplayed: function(emitter, account, author, message, conversation, flag) {
-
-        // only trigger on chat message received with nick
-        if (flag != (2 | 32)) return;
-
-        if (conversation) {
-            let source = this._sources[conversation];
-            if (!source) {
-                source = new Source(this, account, author, message, conversation, true, 2);
-                source.connect('destroy', Lang.bind(this,
-                    function() {
-                        delete this._sources[conversation];
-                    }
-                ));
-            }
-            this._sources[conversation] = source;
-        }
-    },
-
     _messageDisplayed: function(emitter, account, author, message, conversation, flag) {
-
         // only trigger on message received/message sent
         if (flag != 2 && flag != 1) return;
 
         if (conversation) {
             let source = this._sources[conversation];
             if (!source) {
-                source = new Source(this, account, author, message, conversation, false, flag);
+                source = new Source(this, account, author, message, conversation, flag);
                 source.connect('destroy', Lang.bind(this, 
                     function() {
                         delete this._sources[conversation];
