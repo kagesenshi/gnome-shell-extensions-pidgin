@@ -1,0 +1,12 @@
+Gnome Shell Pidgin extension
+by KageSenshi
+
+The extension utilize pidgin's dbus API, to intergrate Pidgin into the Gnome
+shell. I only did some rough test with it only on my Fedora 15 machine, but
+I believe it should work ok everywhere else.
+
+Install:
+ mkdir -p ~/.local/share/gnome-shell/extensions/pidgin@gnome-shell-extensions.gnome.org
+ cp extension.js metadata.json ~/.local/share/gnome-shell/extensions/pidgin@gnome-shell-extensions.gnome.org
+
+ and then restart Gnome shell (Alt+F2 type r and hit enter)
