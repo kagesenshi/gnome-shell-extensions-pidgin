@@ -214,15 +214,15 @@ function wrappedText(text, sender, timestamp, direction) {
     };
 }
 
-
 function _fixText(text) {
     // remove all tags
-    let _text = html_entity_decode(text.replace(/<\/?[^>]+(>|$)/g, ""));
-    _text = _text.replace("&lt;", "<"); //get away from html
-    _text = _text.replace("&gt;", ">");
-    _text = _text.replace("&apos;", "'");
-    _text = _text.replace("&quot;", "\"")
-    _text = _text.replace("&amp;", "\&");
+    let _text = text.replace(/<\/?[^>]+(>|$)/g, "");
+    _text = _text.replace(/&lt;/g, "<");
+    _text = _text.replace(/&gt;/g, ">");
+    _text = _text.replace(/&apos;/g, "'");
+    _text = _text.replace(/&quot;/g, "\"")
+    _text = _text.replace(/&amp;/g, "&");
+
     return _text;
 }
 
