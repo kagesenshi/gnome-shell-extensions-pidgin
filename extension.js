@@ -218,7 +218,11 @@ function wrappedText(text, sender, timestamp, direction) {
 function _fixText(text) {
     // remove all tags
     let _text = html_entity_decode(text.replace(/<\/?[^>]+(>|$)/g, ""));
-    _text = _text.replace('&apos;', '\''); // Gets past html_entity_decode somehow.
+    _text = _text.replace("&lt;", "<"); //get away from html
+    _text = _text.replace("&gt;", ">");
+    _text = _text.replace("&apos;", "'");
+    _text = _text.replace("&quot;", "\"")
+    _text = _text.replace("&amp;", "\&");
     return _text;
 }
 
