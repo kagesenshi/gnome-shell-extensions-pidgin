@@ -375,8 +375,8 @@ Source.prototype = {
 
     _async_notify: function (stats) {
         if (!stats) {
-            MessageTray.Source.prototype.notify.call(this, this._notification);
             this._notification.scrollTo(St.Side.BOTTOM);
+            MessageTray.Source.prototype.notify.call(this, this._notification);
         }
     },
 
