@@ -487,6 +487,65 @@ Source.prototype = {
 
 }
 
+
+function ChatroomSource(client, account, author, initialMessage, conversation, flag) {
+    this._init(client, account, author, initialMessage, conversation, flag);
+}
+
+ChatroomSource.prototype = {
+    __proto__: MessageTray.Source.prototype,
+
+    _init : function (client, account, author, initialMessage, conversation, flag) {
+        this._client = client;
+        this._author = author;
+        this._account = account;
+        this._conversation = conversation;
+        this._initialMessage = initialMessage;
+        this._initialFlag = flag;
+
+        let proxy = client.proxy();
+        proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
+    },
+
+    _async_set_title: function(title) {
+        let proxy = this._client.proxy();
+        this.title = _fixText(title);
+        this._start();
+    },
+
+    _start: function () {
+        let proxy = this._client.proxy();
+        MessageTray.Source.prototype._init.call(this, this.title);
+        this._setSummaryIcon(this.createNotificationIcon());
+        Main.messageTray.add(this);
+        this.notifyMessage(this._initialMessage);
+    },
+
+    notifyMessage: function (message) {
+        let banner = '<' + _fixText(this._author) + '> ' + _fixText(message);
+        let notification = new MessageTray.Notification(this, this.title, banner, {});
+        this.pushNotification(notification);
+        notification.connect('destroy', Lang.bind(this, this.destroy));
+        this.notify(notification);
+    },
+
+    createNotificationIcon: function() {
+        let iconBox = new St.Bin({ style_class: 'avatar-box' });
+        iconBox._size = this.ICON_SIZE;
+
+        iconBox.child = new St.Icon({ icon_name: 'pidgin',
+                                    icon_type: St.IconType.FULLCOLOR,
+                                    icon_size: iconBox._size });
+        return iconBox;
+    },
+
+    open: function(notification) {
+        let proxy = this._client.proxy();
+        proxy.PurpleConversationPresentRemote(this._conversation);
+    }
+}
+
+
 const PidginIface = {
     name: 'im.pidgin.purple.PurpleInterface',
     properties: [],
@@ -543,6 +602,7 @@ function PidginClient() {
 PidginClient.prototype = {
     _init: function() {
         this._sources = {};
+        this._chatroomsources = {};
         this._proxy = new Pidgin(DBus.session, 'im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject');
         this._displayedImMsgId = 0;
         this._displayedChatMsgId = 0;
@@ -550,6 +610,7 @@ PidginClient.prototype = {
 
     enable: function() {
         this._displayedImMsgId = this._proxy.connect('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
+        this._displayedChatMsgId = this._proxy.connect('DisplayedChatMsg', Lang.bind(this, this._chatroomMessageDisplayed));
     },
     
     disable: function() {
@@ -589,6 +650,25 @@ PidginClient.prototype = {
             }
             this._sources[conversation] = source;
         }
+    },
+
+    _chatroomMessageDisplayed: function(emitter, account, author, message, conversation, flag) {
+        if (flag != (2 | 32)) return;
+
+        if (conversation) {
+            let source = this._chatroomsources[conversation];
+            if (!source) {
+                source = new ChatroomSource(this, account, author, message, conversation, flag);
+                source.connect('destroy', Lang.bind(this,
+                    function() {
+                        delete this._chatroomsources[conversation];
+                    }
+                ));
+            } else {
+                source.notifyMessage(message);
+            }
+            this._chatroomsources[conversation] = source;
+        } 
     }
 }
 
