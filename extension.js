@@ -364,8 +364,8 @@ Source.prototype = {
     },
 
     open: function(notification) {
-        let app = Shell.AppSystem.get_default().get_app('pidgin.desktop');
-        app.activate_window(null, global.get_current_time());
+        let proxy = this._client.proxy();
+        proxy.PurpleConversationPresentRemote(this._conversation);
     },
 
     notify: function () {
@@ -516,7 +516,8 @@ const PidginIface = {
         {name: 'PurpleConversationMessageGetMessage', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleConversationGetTitle', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleConversationHasFocus', inSignature: 'i', outSignature: 'b'},
-        {name: 'PurpleConversationUpdate', inSignature: 'ii', outSignature: ''}
+        {name: 'PurpleConversationUpdate', inSignature: 'ii', outSignature: ''},
+        {name: 'PurpleConversationPresent', inSignature: 'i', outSignature: ''}
     ],
     signals: [
         {name: 'ReceivedImMsg', inSignature: 'issiu'},
