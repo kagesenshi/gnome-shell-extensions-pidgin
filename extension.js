@@ -226,14 +226,6 @@ function _fixText(text) {
     return _text;
 }
 
-function PidginChatNotification(source) {
-    this._init(source);
-}
-
-PidginChatNotification.prototype = {
-    __proto__: TelepathyClient.ChatNotification.prototype
-}
-
 function Source(client, account, author, initialMessage, conversation, flag) {
     this._init(client, account, author, initialMessage, conversation, flag);
 }
@@ -255,9 +247,10 @@ Source.prototype = {
         this._iconUri = null;
         this._presence = 'online';
         this.isChat = true;
-        this._notification = new PidginChatNotification(this);
+        this._notification = new TelepathyClient.ChatNotification(this);
         this._notification.setUrgency(MessageTray.Urgency.HIGH);
         this._notification.enableScrolling(true);
+        this._chatState = Tp.ChannelChatState.ACTIVE;
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
     },
 
@@ -309,6 +302,9 @@ Source.prototype = {
         } else if (this._initialFlag == 2) {
             direction = TelepathyClient.NotificationDirection.RECEIVED;
         }
+
+        this._notification.connect('clicked', Lang.bind(this, this._flushAttention));
+        this.connect('summary-item-clicked', Lang.bind(this, this._flushAttention));
         
         let message = wrappedText(this._initialMessage, this._author, null, direction);
         this._notification.appendMessage(message, false);
@@ -331,7 +327,26 @@ Source.prototype = {
         proxy.disconnect(this._messageDisplayedId);
         MessageTray.Source.prototype.destroy.call(this);
     },
-    
+
+    setChatState: function (state) {
+        if (state != this._chatState) {
+            this._chatState = state;
+            let proxy = this._client.proxy();
+            let pidginstate = 0;
+            if (state == Tp.ChannelChatState.PAUSED) {
+                pidginstate = 1;
+            } else if (state == Tp.ChannelChatState.COMPOSING) {
+                pidginstate = 2;
+            }
+            // no idea why i didnt see typing state, but lets leave this here for now
+            proxy.PurpleConvImSetTypingStateRemote(this._conversation_im, pidginstate);
+        }
+    },
+
+    _flushAttention: function () {
+        let proxy = this._client.proxy();
+        proxy.PurpleConversationUpdateRemote(this._conversation, 4);
+    },
 
     createNotificationIcon: function() {
         let iconBox = new St.Bin({ style_class: 'avatar-box' });
@@ -369,6 +384,7 @@ Source.prototype = {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
         proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        this._flushAttention();
     },
 
     _onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
@@ -491,6 +507,7 @@ const PidginIface = {
         {name: 'PurpleConvImSend', inSignature: 'is', outSignature: ''},
         {name: 'PurpleConvChatSend', inSignature: 'is', outSignature: ''},
         {name: 'PurpleConvIm', inSignature: 'i', outSignature: 'i'},
+        {name: 'PurpleConvImSetTypingState', inSignature:'ii', outSignature: ''},
         {name: 'PurpleConvChat', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConvImGetIcon', inSignature: 'i', outSignature: 'i'},
         {name: 'PurpleConversationGetName', inSignature: 'i', outSignature: 's'},
@@ -498,7 +515,8 @@ const PidginIface = {
         {name: 'PurpleConversationGetMessageHistory', inSignature: 'i', outSignature: 'ai'},
         {name: 'PurpleConversationMessageGetMessage', inSignature: 'i', outSignature: 's'},
         {name: 'PurpleConversationGetTitle', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleConversationHasFocus', inSignature: 'i', outSignature: 'b'}
+        {name: 'PurpleConversationHasFocus', inSignature: 'i', outSignature: 'b'},
+        {name: 'PurpleConversationUpdate', inSignature: 'ii', outSignature: ''}
     ],
     signals: [
         {name: 'ReceivedImMsg', inSignature: 'issiu'},
