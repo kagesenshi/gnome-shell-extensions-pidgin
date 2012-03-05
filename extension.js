@@ -249,8 +249,8 @@ Source.prototype = {
         this.isChat = true;
         this._notification = new TelepathyClient.ChatNotification(this);
         this._notification.setUrgency(MessageTray.Urgency.HIGH);
-        this._notification.enableScrolling(true);
         this._chatState = Tp.ChannelChatState.ACTIVE;
+        this._pendingMessages = [];
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
     },
 
@@ -309,6 +309,10 @@ Source.prototype = {
         let message = wrappedText(this._initialMessage, this._author, null, direction);
         this._notification.appendMessage(message, false);
 
+        if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
+            this._addPendingMessage(message);
+        }
+
         this._buddyStatusChangeId = proxy.connect('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
         this._buddySignedOffId = proxy.connect('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
         this._buddySignedOnId = proxy.connect('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
@@ -346,6 +350,7 @@ Source.prototype = {
     _flushAttention: function () {
         let proxy = this._client.proxy();
         proxy.PurpleConversationUpdateRemote(this._conversation, 4);
+        this._flushPendingMessages();
     },
 
     createNotificationIcon: function() {
@@ -473,16 +478,33 @@ Source.prototype = {
             } else if (flag == 2) {
                 direction = TelepathyClient.NotificationDirection.RECEIVED;
             }
+
+            let message = wrappedText(text, author, null, direction);
+
             if (direction != null) {
-                let message = wrappedText(text, author, null, direction);
                 this._notification.appendMessage(message, false);
             }
 
             if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
+                this._addPendingMessage(message);
                 this.notify();
             }
         }
 
+    },
+
+    _addPendingMessage: function (message) {
+        this._pendingMessages.push(message);
+        this._updateCount();
+    },
+
+    _updateCount: function () {
+        this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
+    },
+
+    _flushPendingMessages: function() {
+        this._pendingMessages = [];
+        this._updateCount();
     }
 
 }
