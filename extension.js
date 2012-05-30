@@ -695,6 +695,21 @@ PidginClient.prototype = {
 }
 
 function init(metaObject) {
-    imports.gettext.bindtextdomain('gnome-shell-extensions', metaObject.metadata.localedir);
+    var LocalDir;
+
+    // gnome-shell 3.4
+    if ("metadata" in metaObject) {
+        LocalDir = metaObject.metadata.localedir;
+    }
+    // gnome-shell 3.2
+    else if ("localedir" in metaObject) {
+        LocalDir = metaObject.localedir;
+    }
+    // don't know what happends, hardcode it.
+    else {
+        LocalDir = "/usr/share/locale";
+    }
+
+    imports.gettext.bindtextdomain('gnome-shell-extensions', LocalDir);
     return new PidginClient();
 }
