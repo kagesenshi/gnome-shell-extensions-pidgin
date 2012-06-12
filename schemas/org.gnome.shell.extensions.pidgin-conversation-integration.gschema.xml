@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="pidgin-conversation-intregration">
+  <schema path="/org/gnome/shell/extensions/pidgin-conversation-integration/" id="org.gnome.shell.extensions.pidgin-conversation-integration">
+    <key type="b" name="show-status-changes">
+      <default>true</default>
+      <summary>Show notifications for status changes</summary>
+      <description>Show notifications for contacts switching to away, available, dnd, etc. Set true or false.</description>
+    </key>
+    <key type="b" name="show-online-offline">
+      <default>true</default>
+      <summary>Show notifications for online/offline</summary>
+      <description>Show notifications for contacts switching to online or offline mode. Set true or false.</description>
+    </key>
+  </schema>
+</schemalist>
