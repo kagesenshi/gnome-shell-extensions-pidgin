@@ -4,5 +4,6 @@
  "description": "Display Pidgin chats as notifications in the Shell message tray.",
  "shell-version": [ "3.1.91", "3.1.92", "3.2", "3.4" ],
  "localedir": "/usr/share/locale",
+ "settings-schema": "org.gnome.shell.extensions.pidgin-conversation-integration",
  "url": "https://github.com/kagesenshi/gnome-shell-extensions-pidgin"
 }
