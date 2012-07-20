@@ -318,6 +318,7 @@ Source.prototype = {
         this._buddySignedOnId = proxy.connect('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
         this._messageDisplayedId = proxy.connect('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
         this._deleteConversationId = proxy.connect('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
+        this._conversationUpdatedId = proxy.connect('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
 
         this.notify();
     },
@@ -329,6 +330,7 @@ Source.prototype = {
         proxy.disconnect(this._buddySignedOnId);
         proxy.disconnect(this._deleteConversationId);
         proxy.disconnect(this._messageDisplayedId);
+        proxy.disconnect(this._conversationUpdatedId);
         MessageTray.Source.prototype.destroy.call(this);
     },
 
@@ -351,6 +353,15 @@ Source.prototype = {
         let proxy = this._client.proxy();
         proxy.PurpleConversationUpdateRemote(this._conversation, 4);
         this._flushPendingMessages();
+    },
+
+    _onConversationUpdated: function (emitter, conversation, flags) {
+        if (conversation != this._conversation) return;
+
+        const PURPLE_CONV_UPDATE_UNSEEN = 4;
+        if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
+            this._flushPendingMessages();
+        }
     },
 
     createNotificationIcon: function() {
@@ -488,6 +499,9 @@ Source.prototype = {
             if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
                 this._addPendingMessage(message);
                 this.notify();
+            } else if (direction == TelepathyClient.NotificationDirection.SENT) {
+                this._flushPendingMessages();
+                this.notify();
             }
         }
 
@@ -611,7 +625,8 @@ const PidginIface = {
         {name: 'BuddySignedOff', inSignature: 'i'},
         {name: 'BuddySignedOn', inSignature: 'i'},
         {name: 'DeletingConversation', inSignature: 'i'},
-        {name: 'ConversationCreated', inSignature: 'i'}
+        {name: 'ConversationCreated', inSignature: 'i'},
+        {name: 'ConversationUpdated', inSignature: 'ii'}
     ]
 };
 
