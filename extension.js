@@ -185,7 +185,7 @@ const St = imports.gi.St;
 const Main = imports.ui.main;
 const MessageTray = imports.ui.messageTray;
 const Shell = imports.gi.Shell;
-const TelepathyClient = imports.ui.telepathyClient;
+const TelepathyClient = imports.ui.components.telepathyClient;
 const Tp = imports.gi.TelepathyGLib;
 
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
@@ -359,14 +359,23 @@ Source.prototype = {
 
         if (!this._iconUri) {
             iconBox.child = new St.Icon({ icon_name: 'avatar-default',
-                                          icon_type: St.IconType.FULLCOLOR,
-                                          icon_size: iconBox._size });
+                                          //icon_type: St.IconType.FULLCOLOR,
+                                          //icon_size: iconBox._size 
+            });
         } else {
             let textureCache = St.TextureCache.get_default();
             iconBox.child = textureCache.load_uri_async(this._iconUri, iconBox._size, iconBox._size);
         }
         return iconBox;
     },
+
+    createIcon: function() {
+        let iconBox = new St.Bin();
+        iconBox.child = new St.Icon({ style_class: 'secondary-icon' });
+        iconBox.child.icon_name = 'user-available';
+        return iconBox;
+    },
+    createSecondaryIcon: function () {return this.createIcon();},
 
     open: function(notification) {
         let proxy = this._client.proxy();
@@ -499,7 +508,7 @@ Source.prototype = {
     },
 
     _updateCount: function () {
-        this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
+        //this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
     },
 
     _flushPendingMessages: function() {
@@ -556,8 +565,9 @@ ChatroomSource.prototype = {
         iconBox._size = this.ICON_SIZE;
 
         iconBox.child = new St.Icon({ icon_name: 'pidgin',
-                                    icon_type: St.IconType.FULLCOLOR,
-                                    icon_size: iconBox._size });
+                                    //icon_type: St.IconType.FULLCOLOR,
+                                    //icon_size: iconBox._size 
+        });
         return iconBox;
     },
 
