@@ -371,11 +371,15 @@ Source.prototype = {
 
     createIcon: function() {
         let iconBox = new St.Bin();
+        iconBox.child = new St.Icon({ icon_name: 'avatar-default' });
+        return iconBox;
+    },
+    createSecondaryIcon: function() {
+        let iconBox = new St.Bin();
         iconBox.child = new St.Icon({ style_class: 'secondary-icon' });
         iconBox.child.icon_name = 'user-available';
         return iconBox;
     },
-    createSecondaryIcon: function () {return this.createIcon();},
 
     open: function(notification) {
         let proxy = this._client.proxy();
