@@ -513,6 +513,7 @@ Source.prototype = {
 
     _updateCount: function () {
         //this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
+        //this.countUpdated();
     },
 
     _flushPendingMessages: function() {
@@ -710,20 +711,7 @@ PidginClient.prototype = {
 
 function init(metaObject) {
     var LocalDir;
-
-    // gnome-shell 3.4
-    if ("metadata" in metaObject) {
-        LocalDir = metaObject.metadata.localedir;
-    }
-    // gnome-shell 3.2
-    else if ("localedir" in metaObject) {
-        LocalDir = metaObject.localedir;
-    }
-    // don't know what happends, hardcode it.
-    else {
-        LocalDir = "/usr/share/locale";
-    }
-
+    LocalDir = metaObject.metadata.localedir;
     imports.gettext.bindtextdomain('gnome-shell-extensions', LocalDir);
     return new PidginClient();
 }
