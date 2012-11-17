@@ -5,6 +5,8 @@
  *
  * Credits to the author of Gajim extension as this extension code was modified
  * from it.
+ * 
+ * Merges in code from the Pidgin Persistent Notification extension: https://github.com/githubnemo/Pidgin-Persistent-Notification/
  *
  */
 
@@ -594,7 +596,7 @@ ChatroomSource.prototype = {
 
         iconBox.child = new St.Icon({ icon_name: 'pidgin',
                                     //icon_type: St.IconType.FULLCOLOR,
-                                    //icon_size: iconBox._size 
+                                    icon_size: iconBox._size 
         });
         return iconBox;
     },
