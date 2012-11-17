@@ -326,6 +326,8 @@ Source.prototype = {
         this._conversationUpdated = proxy.connect('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connect('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
 
+        this._addPersistentNotification();
+
         this.notify();
     },
 
@@ -703,12 +705,6 @@ PidginClient.prototype = {
     proxy: function () {
         return this._proxy;
     },
-    _onSignedOn: function(emitter, connection) {
-        UserMenuButton._iconBox.child = UserMenuButton._availableIcon;
-     }, 
-    _onSignedOff: function(emitter, connection) {
-        UserMenuButton._iconBox.child = UserMenuButton._offlineIcon;
-     },
 
     _messageDisplayed: function(emitter, account, author, message, conversation, flag) {
         // only trigger on message received/message sent
@@ -745,7 +741,13 @@ PidginClient.prototype = {
             }
             this._chatroomsources[conversation] = source;
         } 
-    }
+    },
+    _onSignedOn: function(emitter, connection) {
+        UserMenuButton._iconBox.child = UserMenuButton._availableIcon;
+     }, 
+    _onSignedOff: function(emitter, connection) {
+        UserMenuButton._iconBox.child = UserMenuButton._offlineIcon;
+     }
 }
 
 function init(metaObject) {
