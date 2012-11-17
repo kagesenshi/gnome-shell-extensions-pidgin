@@ -187,9 +187,13 @@ const MessageTray = imports.ui.messageTray;
 const Shell = imports.gi.Shell;
 const TelepathyClient = imports.ui.components.telepathyClient;
 const Tp = imports.gi.TelepathyGLib;
+const PURPLE_MESSAGE_SYSTEM = 0x4;
+const PURPLE_CONV_UPDATE_UNSEEN = 4;
+const ICON_SIZE = 24;
 
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
+let UserMenuButton = imports.ui.main.panel.statusArea.userMenu;
 
 function wrappedText(text, sender, timestamp, direction) {
     let currentTime = (Date.now() / 1000);
@@ -317,6 +321,7 @@ Source.prototype = {
         this._buddySignedOffId = proxy.connect('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
         this._buddySignedOnId = proxy.connect('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
         this._messageDisplayedId = proxy.connect('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
+        this._conversationUpdated = proxy.connect('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connect('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
 
         this.notify();
@@ -355,7 +360,7 @@ Source.prototype = {
 
     createNotificationIcon: function() {
         let iconBox = new St.Bin({ style_class: 'avatar-box' });
-        iconBox._size = this.ICON_SIZE;
+        iconBox._size = ICON_SIZE;
 
         if (!this._iconUri) {
             iconBox.child = new St.Icon({ icon_name: 'avatar-default',
@@ -503,9 +508,27 @@ Source.prototype = {
                 this.notify();
             }
         }
+        let focusApp = Shell.WindowTracker.get_default().focus_app;
+        if(focusApp == null || focusApp.get_id() != 'pidgin.desktop')
+        {
+            this._addPersistentNotification();
+        }
 
     },
 
+    _addPersistentNotification: function() {
+      UserMenuButton._iconBox.add_style_class_name('pidgin-notification');
+    },
+
+    _removePersistentNotification: function() {
+      UserMenuButton._iconBox.remove_style_class_name('pidgin-notification');
+    },
+
+    _onConversationUpdated: function(emitter, _conv, flags) {
+        if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
+          this._removePersistentNotification();
+        }
+    },
     _addPendingMessage: function (message) {
         this._pendingMessages.push(message);
         this._updateCount();
@@ -567,7 +590,7 @@ ChatroomSource.prototype = {
 
     createNotificationIcon: function() {
         let iconBox = new St.Bin({ style_class: 'avatar-box' });
-        iconBox._size = this.ICON_SIZE;
+        iconBox._size = ICON_SIZE;
 
         iconBox.child = new St.Icon({ icon_name: 'pidgin',
                                     //icon_type: St.IconType.FULLCOLOR,
@@ -626,7 +649,8 @@ const PidginIface = {
         {name: 'BuddySignedOff', inSignature: 'i'},
         {name: 'BuddySignedOn', inSignature: 'i'},
         {name: 'DeletingConversation', inSignature: 'i'},
-        {name: 'ConversationCreated', inSignature: 'i'}
+        {name: 'ConversationCreated', inSignature: 'i'},
+        {name: 'ConversationUpdated', inSignature: 'iu'}
     ]
 };
 
