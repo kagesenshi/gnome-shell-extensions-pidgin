@@ -338,8 +338,6 @@ Source.prototype = {
         proxy.disconnect(this._buddySignedOnId);
         proxy.disconnect(this._deleteConversationId);
         proxy.disconnect(this._messageDisplayedId);
-        proxy.disconnect(this._setAvailable);
-        proxy.disconnect(this._setUnavailable);
         MessageTray.Source.prototype.destroy.call(this);
     },
 
@@ -495,7 +493,6 @@ Source.prototype = {
     },
 
     _onDisplayedImMessage: function(emitter, account, author, text, conversation, flag) {
-
         if (text && (this._conversation == conversation)) {
             let direction = null;
             if (flag == 1) {
@@ -676,6 +673,8 @@ PidginClient.prototype = {
         this._proxy = new Pidgin(DBus.session, 'im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject');
         this._displayedImMsgId = 0;
         this._displayedChatMsgId = 0;
+        this._setAvailable = 0;
+        this._setUnavailable = 0;
     },
 
     enable: function() {
@@ -695,6 +694,16 @@ PidginClient.prototype = {
             this._proxy.disconnect(this._displayedChatMsgId);
             this._displayedChatMsgId = 0;
         }
+
+        if (this._setAvailable > 0) {
+            this._proxy.disconnect(this._setAvailable);
+            this._setAvailable = 0;
+        }
+        if (this._setUnavailable > 0) {
+            this._proxy.disconnect(this._setUnavailable);
+            this._setUnavailable = 0;
+        }
+
         
         for (let key in this._sources) {
             if (this._sources.hasOwnProperty(key))
@@ -708,7 +717,10 @@ PidginClient.prototype = {
 
     _messageDisplayed: function(emitter, account, author, message, conversation, flag) {
         // only trigger on message received/message sent
-        if (flag != 2 && flag != 1) return;
+        if (flag != 2 && flag != 1) 
+        {
+            return;
+        }
 
         if (conversation) {
             let source = this._sources[conversation];
