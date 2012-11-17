@@ -336,6 +336,8 @@ Source.prototype = {
         proxy.disconnect(this._buddySignedOnId);
         proxy.disconnect(this._deleteConversationId);
         proxy.disconnect(this._messageDisplayedId);
+        proxy.disconnect(this._setAvailable);
+        proxy.disconnect(this._setUnavailable);
         MessageTray.Source.prototype.destroy.call(this);
     },
 
@@ -483,6 +485,7 @@ Source.prototype = {
         if (shouldNotify) 
             this.notify();
     },
+
 
     _onDeleteConversation: function(emitter, conversation) {
         if (conversation != this._conversation) return;
@@ -652,7 +655,9 @@ const PidginIface = {
         {name: 'BuddySignedOn', inSignature: 'i'},
         {name: 'DeletingConversation', inSignature: 'i'},
         {name: 'ConversationCreated', inSignature: 'i'},
-        {name: 'ConversationUpdated', inSignature: 'iu'}
+        {name: 'ConversationUpdated', inSignature: 'iu'},
+        {name: 'SignedOn', inSignature: 'i'},
+        {name: 'SignedOff', inSignature: 'i'}
     ]
 };
 
@@ -674,6 +679,8 @@ PidginClient.prototype = {
     enable: function() {
         this._displayedImMsgId = this._proxy.connect('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
         this._displayedChatMsgId = this._proxy.connect('DisplayedChatMsg', Lang.bind(this, this._chatroomMessageDisplayed));
+        this._setAvailable = this._proxy.connect('SignedOn', Lang.bind(this, this._onSignedOn));
+        this._setUnavailable = this._proxy.connect('SignedOff', Lang.bind(this, this._onSignedOff));
     },
     
     disable: function() {
@@ -696,6 +703,12 @@ PidginClient.prototype = {
     proxy: function () {
         return this._proxy;
     },
+    _onSignedOn: function(emitter, connection) {
+        UserMenuButton._iconBox.child = UserMenuButton._availableIcon;
+     }, 
+    _onSignedOff: function(emitter, connection) {
+        UserMenuButton._iconBox.child = UserMenuButton._offlineIcon;
+     },
 
     _messageDisplayed: function(emitter, account, author, message, conversation, flag) {
         // only trigger on message received/message sent
