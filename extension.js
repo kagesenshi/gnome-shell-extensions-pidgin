@@ -191,7 +191,7 @@ const TelepathyClient = imports.ui.components.telepathyClient;
 const Tp = imports.gi.TelepathyGLib;
 const PURPLE_MESSAGE_SYSTEM = 0x4;
 const PURPLE_CONV_UPDATE_UNSEEN = 4;
-const ICON_SIZE = 24;
+const ICON_SIZE = MessageTray.Source.prototype.SOURCE_ICON_SIZE;
 
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
@@ -326,7 +326,6 @@ Source.prototype = {
         this._conversationUpdated = proxy.connect('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connect('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
 
-        this._addPersistentNotification();
 
         this.notify();
     },
@@ -512,11 +511,6 @@ Source.prototype = {
                 this.notify();
             }
         }
-        let focusApp = Shell.WindowTracker.get_default().focus_app;
-        if(focusApp == null || focusApp.get_id() != 'pidgin.desktop')
-        {
-            this._addPersistentNotification();
-        }
 
     },
 
@@ -536,6 +530,7 @@ Source.prototype = {
     _addPendingMessage: function (message) {
         this._pendingMessages.push(message);
         this._updateCount();
+        this._addPersistentNotification();
     },
 
     _updateCount: function () {
