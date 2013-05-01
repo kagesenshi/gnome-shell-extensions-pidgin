@@ -328,7 +328,7 @@ Source.prototype = {
         this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
         this._conversationUpdated = proxy.connectSignal('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connectSignal('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
-
+        this._conversationUpdatedId = proxy.connectSignal('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
 
         this.notify();
     },
@@ -340,6 +340,7 @@ Source.prototype = {
         proxy.disconnectSignal(this._buddySignedOnId);
         proxy.disconnectSignal(this._deleteConversationId);
         proxy.disconnectSignal(this._messageDisplayedId);
+        proxy.disconnectSignal(this._conversationUpdatedId);
         MessageTray.Source.prototype.destroy.call(this);
     },
 
@@ -362,6 +363,15 @@ Source.prototype = {
         let proxy = this._client.proxy();
         proxy.PurpleConversationUpdateRemote(this._conversation, 4);
         this._flushPendingMessages();
+    },
+
+    _onConversationUpdated: function (emitter, conversation, flags) {
+        if (conversation != this._conversation) return;
+
+        const PURPLE_CONV_UPDATE_UNSEEN = 4;
+        if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
+            this._flushPendingMessages();
+        }
     },
 
     createNotificationIcon: function() {
@@ -524,6 +534,9 @@ Source.prototype = {
 
             if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
                 this._addPendingMessage(message);
+                this.notify();
+            } else if (direction == TelepathyClient.NotificationDirection.SENT) {
+                this._flushPendingMessages();
                 this.notify();
             }
         }
