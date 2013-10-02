@@ -255,8 +255,6 @@ Source.prototype = {
         this._iconUri = null;
         this._presence = 'online';
         this.isChat = true;
-        this._notification = new TelepathyClient.ChatNotification(this);
-        this._notification.setUrgency(MessageTray.Urgency.HIGH);
         this._chatState = Tp.ChannelChatState.ACTIVE;
         this._pendingMessages = [];
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
@@ -296,6 +294,9 @@ Source.prototype = {
     },
 
     _start: function () {
+
+        this._notification = new TelepathyClient.ChatNotification(this);
+        this._notification.setUrgency(MessageTray.Urgency.HIGH);
 
         let proxy = this._client.proxy();
         MessageTray.Source.prototype._init.call(this, this.title);
