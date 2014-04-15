@@ -18,6 +18,8 @@ const Gio = imports.gi.Gio;
 
 const PidginIface = loadInterfaceXml("dbus.xml")
 
+// inspired from https://github.com/rgcjonas/gnome-shell-extension-appindicator/blob/master/interfaces.js
+// i just copy it and it works , how amazine , i just didn't know what happend
 function loadInterfaceXml(filename) {
     let extension = imports.misc.extensionUtils.getCurrentExtension()
 
