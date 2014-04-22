@@ -254,7 +254,6 @@ Source.prototype = {
         this._initialFlag = flag;
         this._iconUri = null;
         this._presence = 'online';
-        this.isChat = true;
         this._chatState = Tp.ChannelChatState.ACTIVE;
         this._pendingMessages = [];
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
@@ -581,9 +580,52 @@ Source.prototype = {
 
 
 function ChatroomSource(client, account, author, initialMessage, conversation, flag) {
-    this._init(client, account, author, initialMessage, conversation, flag);
+	this._init(client, account, author, initialMessage, conversation, flag);
+}
+ChatroomSource.prototype = Object.create(Source.prototype);
+
+ChatroomSource.prototype._start = function(){
+	Source.prototype._start.call(this);
+	let proxy = this._client.proxy();
+	this._chatmsgDisplayedId = proxy.connectSignal('DisplayedChatMsg', Lang.bind(this, this._onDisplayedChatMessage));
 }
 
+ChatroomSource.prototype._onDisplayedChatMessage = function(emitter, something, details){
+	var account = details[0];
+	var author = details[1];
+	var text = details[2];
+	var conversation = details[3];
+	var flag = details[4];
+	if (text && (this._conversation == conversation)) {
+		let direction = null;
+		if (flag == 1) {
+			direction = TelepathyClient.NotificationDirection.SENT;
+		} else if (flag == 2) {
+			direction = TelepathyClient.NotificationDirection.RECEIVED;
+		}
+
+		let message = wrappedText(text, author, null, direction);
+
+		if (direction != null) {
+			this._notification.appendMessage(message, false);
+		}
+
+		if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
+			this._addPendingMessage(message);
+			this.notify();
+		} else if (direction == TelepathyClient.NotificationDirection.SENT) {
+			this._flushPendingMessages();
+			this.notify();
+		}
+	}
+}
+
+ChatroomSource.prototype.destroy = function(){
+	let proxy = this._client.proxy();
+	proxy.disconnectSignal(this._chatmsgDisplayedId);
+	Source.prototype.destroy.call(this)
+}
+/*
 ChatroomSource.prototype = {
     __proto__: MessageTray.Source.prototype,
 
@@ -595,15 +637,19 @@ ChatroomSource.prototype = {
         this._initialMessage = initialMessage;
         this._initialFlag = flag;
 
+		  log("hi");
+
         let proxy = client.proxy();
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
     },
 
-    _async_set_title: function(title) {
-        let proxy = this._client.proxy();
-        this.title = _fixText(title);
-        this._start();
-    },
+	 _async_set_title: function(title) {
+		 title=title[0];
+		 let proxy = this._client.proxy();
+		 log("Title:"+title);
+		 this.title = _fixText(title);
+		 this._start();
+	 },
 
     _start: function () {
         let proxy = this._client.proxy();
@@ -637,7 +683,7 @@ ChatroomSource.prototype = {
         proxy.PurpleConversationPresentRemote(this._conversation);
     }
 }
-
+*/
 
 const Pidgin = Gio.DBusProxy.makeProxyWrapper(DBusIface.PidginIface);
 
@@ -723,12 +769,13 @@ PidginClient.prototype = {
     },
 
     _chatroomMessageDisplayed: function(emitter, something, details) {
-        account = details[0];
-        author = details[1];
-        message = details[2];
-        conversation = details[3];
-        flag = details[4];
-        if (flag != (2 | 32)) return;
+        var account = details[0];
+        var author = details[1];
+        var message = details[2];
+        var conversation = details[3];
+        var flag = details[4];
+		  //send is 1, recv is 2, flag & 3 == 0 means nither send nor recv
+		  if (flag & 3 == 0) return;
 
         if (conversation) {
             let source = this._chatroomsources[conversation];
@@ -739,8 +786,6 @@ PidginClient.prototype = {
                         delete this._chatroomsources[conversation];
                     }
                 ));
-            } else {
-                source.notifyMessage(message);
             }
             this._chatroomsources[conversation] = source;
         } 
