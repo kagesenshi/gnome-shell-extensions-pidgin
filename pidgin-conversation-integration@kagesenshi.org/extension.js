@@ -386,7 +386,8 @@ Source.prototype = {
             });
         } else {
             let textureCache = St.TextureCache.get_default();
-            iconBox.child = textureCache.load_uri_async(this._iconUri, iconBox._size, iconBox._size);
+				let scale = 1;
+            iconBox.child = textureCache.load_uri_async(this._iconUri, iconBox._size, iconBox._size, scale);
         }
         return iconBox;
     },
