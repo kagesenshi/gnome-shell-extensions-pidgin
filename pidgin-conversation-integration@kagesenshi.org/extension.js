@@ -275,21 +275,10 @@ Source.prototype = {
     },
 
 	 _get_icon_begin : function() {
-		 this._get_icon_end(0);
-	 }
+		 this._get_icon_end();
+	 },
 
-    _get_icon_end: function (iconobj) {
-        let proxy = this._client.proxy();
-        if (iconobj && iconobj != 0) {
-            proxy.PurpleBuddyIconGetFullPathRemote(iconobj, Lang.bind(this, this._async_set_icon));
-        } else {
-            this._start();
-        }
-    },
-
-    _async_set_icon: function (iconpath) {
-		 if(iconpath)
-			 this._iconUri = 'file://' + iconpath;
+    _get_icon_end: function () {
 		 this._start();
     },
 
@@ -501,9 +490,22 @@ ImSource.prototype = {
     _async_set_author_buddy: function (author_buddy) {
         let proxy = this._client.proxy();
         this._author_buddy = author_buddy;
-        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._get_icon_end));
+        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
     },
 
+	 _async_get_icon: function(iconobj) {
+        let proxy = this._client.proxy();
+        if (iconobj && iconobj != 0) 
+            proxy.PurpleBuddyIconGetFullPathRemote(iconobj, Lang.bind(this, this._async_get_icon_path));
+        else
+			  this._get_icon_end();
+	 },
+
+	 _async_get_icon_path: function(iconpath) {
+		 if(iconpath)
+			 this._iconUri = 'file://' + iconpath;
+		 this._get_icon_end();
+	 },
 
 	_onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
 		if (!this.title) return;
@@ -621,6 +623,7 @@ ChatroomSource.prototype = {
 		this._cbNames = {};
 		this._cbBlockedMsg = {};
 		this._isChat = true;
+		this._iconCacheDir = null;
 	},
 
 	_connectSignals : function() {
@@ -637,6 +640,16 @@ ChatroomSource.prototype = {
 
 	_get_icon_begin: function() {
 		let proxy = this._client.proxy();
+		proxy.PurpleBuddyIconsGetCacheDirRemote(Lang.bind(this, this._async_get_icon_cache_dir));
+	},
+
+	_async_get_icon_cache_dir: function(dir) {
+		let proxy = this._client.proxy();
+		this._iconCacheDir = dir;
+		if(!dir){
+			this._get_icon_end();
+			return;
+		}
 		proxy.PurpleConversationGetNameRemote(this._conversation, Lang.bind(this, this._async_get_chat_name));
 	},
 
@@ -647,7 +660,15 @@ ChatroomSource.prototype = {
 
 	_async_get_chat_node: function(chat_node) {
 		let proxy = this._client.proxy();
-		proxy.PurpleBuddyIconsNodeFindCustomIconRemote(chat_node, Lang.bind(this, this._get_icon_end));
+		proxy.PurpleBlistNodeGetStringRemote(chat_node, "custom_buddy_icon", Lang.bind(this, this._get_icon_file_name));
+	},
+
+	_get_icon_file_name: function(file_name) {
+		if(file_name && file_name != ""){
+			this._iconUri = "file://"+this._iconCacheDir+"/"+file_name;
+			log(this._iconUri);
+		}
+		this._get_icon_end();
 	},
 
 	_async_find_buddy : function(buddy, something, author) {
