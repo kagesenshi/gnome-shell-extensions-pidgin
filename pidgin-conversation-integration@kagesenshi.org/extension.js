@@ -268,12 +268,13 @@ Source.prototype = {
     _async_set_author_buddy: function (author_buddy) {
         let proxy = this._client.proxy();
         this._author_buddy = author_buddy;
-        proxy.PurpleConvImRemote(this._conversation, Lang.bind(this, this._async_set_conversation_im));
+        proxy.PurpleConvImRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
     },
 
-    _async_set_conversation_im: function (conversation_im) {
+	 /**conversation_id : is a conversation_im or conversation_chat **/
+    _async_set_conversation_id: function (conversation_id) {
         let proxy = this._client.proxy();
-        this._conversation_im = conversation_im;
+        this._conversation_id = conversation_id;
         var result = proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
     },
 
@@ -315,7 +316,6 @@ Source.prototype = {
         this._buddySignedOffId = proxy.connectSignal('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
         this._buddySignedOnId = proxy.connectSignal('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
         this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedMessage));
-        //this._conversationUpdated = proxy.connectSignal('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connectSignal('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
         this._conversationUpdatedId = proxy.connectSignal('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
 
@@ -344,7 +344,8 @@ Source.prototype = {
                 pidginstate = 2;
             }
             // no idea why i didnt see typing state, but lets leave this here for now
-            proxy.PurpleConvImSetTypingStateRemote(this._conversation_im, pidginstate);
+				// xiehuc: disable here, for chatroom message
+            //proxy.PurpleConvImSetTypingStateRemote(this._conversation_id, pidginstate);
         }
     },
 
@@ -421,7 +422,7 @@ Source.prototype = {
     respond: function(text) {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
-        proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        proxy.PurpleConvImSendRemote(this._conversation_id, _text);
         this._flushAttention();
     },
 
@@ -580,6 +581,12 @@ ChatroomSource.prototype = {
 		this._cbBlockedMsg = {};
 	},
 
+	_async_set_author_buddy: function (author_buddy) {
+		let proxy = this._client.proxy();
+		this._author_buddy = author_buddy;
+		proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
+	},
+
 	_start: function() {
 		Source.prototype._start.call(this);
 		let proxy = this._client.proxy();
@@ -611,7 +618,8 @@ ChatroomSource.prototype = {
 		var text = details[2];
 		var conversation = details[3];
 		var flag = details[4];
-		if(this._cbNames[author] == undefined){
+		var author_nick = null;
+		if(flag==2 && this._cbNames[author] == undefined){
 			let proxy = this._client.proxy();
 			this._cbBlockedMsg[author] = details;
 			proxy.PurpleFindBuddyRemote(this._account, author, Lang.bind(this, this._async_find_buddy, author));
@@ -621,11 +629,13 @@ ChatroomSource.prototype = {
 			let direction = null;
 			if (flag == 1) {
 				direction = TelepathyClient.NotificationDirection.SENT;
+				author_nick = "me";
 			} else if (flag == 2) {
 				direction = TelepathyClient.NotificationDirection.RECEIVED;
+				author_nick = this._cbNames[author];
 			}
 
-			let message = wrappedText('['+this._cbNames[author]+']: '+text, author, null, direction);
+			let message = wrappedText('['+author_nick+']: '+text, author, null, direction);
 
 			if (direction != null) {
 				this._notification.appendMessage(message, false);
@@ -639,6 +649,13 @@ ChatroomSource.prototype = {
 				this.notify();
 			}
 		}
+	},
+
+	respond: function(text) {
+		let proxy = this._client.proxy();
+		let _text = GLib.markup_escape_text(text, -1);
+		proxy.PurpleConvChatSendRemote(this._conversation_id, _text);
+		this._flushAttention();
 	},
 
 	_destroy : function() {
