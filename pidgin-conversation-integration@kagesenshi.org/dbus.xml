@@ -3274,7 +3274,7 @@
     </signal>
     <signal name='SentChatMsg'>
       <arg type='i'/>
-      <arg type='i'/>
+      <arg type='s'/>
       <arg type='u'/>
     </signal>
     <signal name='BuddyStatusChanged'>
