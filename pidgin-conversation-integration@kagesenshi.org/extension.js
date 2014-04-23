@@ -262,12 +262,6 @@ Source.prototype = {
         title = title[0];
         let proxy = this._client.proxy();
         this.title = _fixText(title);
-        proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
-    },
-
-    _async_set_author_buddy: function (author_buddy) {
-        let proxy = this._client.proxy();
-        this._author_buddy = author_buddy;
 		  if(this._isChat)
 			  proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
 		  else
@@ -276,12 +270,15 @@ Source.prototype = {
 
 	 /**conversation_id : is a conversation_im or conversation_chat **/
     _async_set_conversation_id: function (conversation_id) {
-        let proxy = this._client.proxy();
         this._conversation_id = conversation_id;
-        var result = proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
+		  this._get_icon_begin();
     },
 
-    _async_get_icon: function (iconobj) {
+	 _get_icon_begin : function() {
+		 this._get_icon_end(0);
+	 }
+
+    _get_icon_end: function (iconobj) {
         let proxy = this._client.proxy();
         if (iconobj && iconobj != 0) {
             proxy.PurpleBuddyIconGetFullPathRemote(iconobj, Lang.bind(this, this._async_set_icon));
@@ -291,8 +288,9 @@ Source.prototype = {
     },
 
     _async_set_icon: function (iconpath) {
-        this._iconUri = 'file://' + iconpath;
-        this._start();
+		 if(iconpath)
+			 this._iconUri = 'file://' + iconpath;
+		 this._start();
     },
 
     _start: function () {
@@ -495,6 +493,18 @@ ImSource.prototype = {
 		Source.prototype.destroy.call(this);
 	},
 
+	_get_icon_begin : function() {
+		let proxy = this._client.proxy();
+		proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
+	},
+
+    _async_set_author_buddy: function (author_buddy) {
+        let proxy = this._client.proxy();
+        this._author_buddy = author_buddy;
+        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._get_icon_end));
+    },
+
+
 	_onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
 		if (!this.title) return;
 
@@ -625,6 +635,21 @@ ChatroomSource.prototype = {
 		Source.prototype.destroy.call(this);
 	},
 
+	_get_icon_begin: function() {
+		let proxy = this._client.proxy();
+		proxy.PurpleConversationGetNameRemote(this._conversation, Lang.bind(this, this._async_get_chat_name));
+	},
+
+	_async_get_chat_name: function(chat_name) {
+		let proxy = this._client.proxy();
+		proxy.PurpleBlistFindChatRemote(this._account, chat_name[0], Lang.bind(this, this._async_get_chat_node));
+	},
+
+	_async_get_chat_node: function(chat_node) {
+		let proxy = this._client.proxy();
+		proxy.PurpleBuddyIconsNodeFindCustomIconRemote(chat_node, Lang.bind(this, this._get_icon_end));
+	},
+
 	_async_find_buddy : function(buddy, something, author) {
 		let proxy = this._client.proxy();
 		//if we didn't find the buddy, the cb is not our friends, so it's name is display name
@@ -648,6 +673,7 @@ ChatroomSource.prototype = {
 		var conversation = details[3];
 		var flag = details[4];
 		var author_nick = null;
+
 		if(flag==2 && this._cbNames[author] == undefined){
 			let proxy = this._client.proxy();
 			this._cbBlockedMsg[author] = details;
@@ -681,66 +707,6 @@ ChatroomSource.prototype = {
 	},
 
 }
-
-/*
-ChatroomSource.prototype = {
-    __proto__: MessageTray.Source.prototype,
-
-    _init : function (client, account, author, initialMessage, conversation, flag) {
-        this._client = client;
-        this._author = author;
-        this._account = account;
-        this._conversation = conversation;
-        this._initialMessage = initialMessage;
-        this._initialFlag = flag;
-
-		  log("hi");
-
-        let proxy = client.proxy();
-        proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
-    },
-
-	 _async_set_title: function(title) {
-		 title=title[0];
-		 let proxy = this._client.proxy();
-		 log("Title:"+title);
-		 this.title = _fixText(title);
-		 this._start();
-	 },
-
-    _start: function () {
-        let proxy = this._client.proxy();
-        MessageTray.Source.prototype._init.call(this, this.title);
-        this._setSummaryIcon(this.createNotificationIcon());
-        Main.messageTray.add(this);
-        this.notifyMessage(this._initialMessage);
-    },
-
-    notifyMessage: function (message) {
-        let banner = '<' + _fixText(this._author) + '> ' + _fixText(message);
-        let notification = new MessageTray.Notification(this, this.title, banner, {});
-        this.pushNotification(notification);
-        notification.connect('destroy', Lang.bind(this, this.destroy));
-        this.notify(notification);
-    },
-
-    createNotificationIcon: function() {
-        let iconBox = new St.Bin({ style_class: 'avatar-box' });
-        iconBox._size = ICON_SIZE;
-
-        iconBox.child = new St.Icon({ icon_name: 'pidgin',
-                                    //icon_type: St.IconType.FULLCOLOR,
-                                    icon_size: iconBox._size 
-        });
-        return iconBox;
-    },
-
-    open: function(notification) {
-        let proxy = this._client.proxy();
-        proxy.PurpleConversationPresentRemote(this._conversation);
-    }
-}
-*/
 
 const Pidgin = Gio.DBusProxy.makeProxyWrapper(DBusIface.PidginIface);
 
