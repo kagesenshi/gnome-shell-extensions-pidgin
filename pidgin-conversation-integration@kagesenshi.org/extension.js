@@ -200,26 +200,26 @@ const _ = Gettext.gettext;
 //let UserMenuButton = imports.ui.main.panel.statusArea.userMenu;
 
 function wrappedText(text, sender, timestamp, direction) {
-    let currentTime = (Date.now() / 1000);
+	let currentTime = (Date.now() / 1000);
 	let type = Tp.ChannelTextMessageType.NORMAL;
 
-    if (timestamp == null) {
-        timestamp = currentTime;
-    }
-	
+	if (timestamp == null) {
+		timestamp = currentTime;
+	}
+
 	text = _fixText(text);
 	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
 		text = text.substr(4);
 		type = Tp.ChannelTextMessageType.ACTION;
 	}
 
-    return {
-        text: text,
-		messageType: type,
-        sender: sender,
-        timestamp: timestamp,
-        direction: direction
-    };
+	return {
+		text: text,
+			messageType: type,
+			sender: sender,
+			timestamp: timestamp,
+			direction: direction
+	};
 }
 
 function _fixText(text) {
@@ -250,8 +250,7 @@ Source.prototype = {
         this._authors[author] = true;
         this._account = account;
         this._conversation = conversation;
-        this._initialMessage = initialMessage;
-        this._initialFlag = flag;
+		  this._blockedMsg = [account, author, initialMessage, conversation, flag];
         this._iconUri = null;
         this._presence = 'online';
         this._chatState = Tp.ChannelChatState.ACTIVE;
@@ -305,27 +304,17 @@ Source.prototype = {
         Main.messageTray.add(this);
         this.pushNotification(this._notification);
 
-        let direction = null;
-        if (this._initialFlag == 1) {
-            direction = TelepathyClient.NotificationDirection.SENT;
-        } else if (this._initialFlag == 2) {
-            direction = TelepathyClient.NotificationDirection.RECEIVED;
-        }
-
         this._notification.connect('clicked', Lang.bind(this, this._flushAttention));
         this.connect('summary-item-clicked', Lang.bind(this, this._flushAttention));
-        
-        let message = wrappedText(this._initialMessage, this._author, null, direction);
-        this._notification.appendMessage(message, false);
 
-        if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
-            this._addPendingMessage(message);
-        }
+		  //display Blocked Message
+		  this._onDisplayedMessage("","",this._blockedMsg);
+		  this._blockedMsg = null;
 
         this._buddyStatusChangeId = proxy.connectSignal('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
         this._buddySignedOffId = proxy.connectSignal('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
         this._buddySignedOnId = proxy.connectSignal('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
-        this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
+        this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedMessage));
         //this._conversationUpdated = proxy.connectSignal('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connectSignal('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
         this._conversationUpdatedId = proxy.connectSignal('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
@@ -514,7 +503,7 @@ Source.prototype = {
         this.destroy();
     },
 
-    _onDisplayedImMessage: function(emitter, something, details) {
+    _onDisplayedMessage: function(emitter, something, details) {
         var account = details[0];
         var author = details[1];
         var text = details[2];
@@ -582,49 +571,82 @@ Source.prototype = {
 function ChatroomSource(client, account, author, initialMessage, conversation, flag) {
 	this._init(client, account, author, initialMessage, conversation, flag);
 }
-ChatroomSource.prototype = Object.create(Source.prototype);
+ChatroomSource.prototype = {
+	__proto__: Source.prototype,
+	
+	_init: function(client, account, author, initialMessage, conversation, flag) {
+		Source.prototype._init.call(this, client, account, author, initialMessage, conversation, flag);
+		this._cbNames = {};
+		this._cbBlockedMsg = {};
+	},
 
-ChatroomSource.prototype._start = function(){
-	Source.prototype._start.call(this);
-	let proxy = this._client.proxy();
-	this._chatmsgDisplayedId = proxy.connectSignal('DisplayedChatMsg', Lang.bind(this, this._onDisplayedChatMessage));
-}
+	_start: function() {
+		Source.prototype._start.call(this);
+		let proxy = this._client.proxy();
+		proxy.disconnectSignal(this._messageDisplayedId);
+		this._chatmsgDisplayedId = proxy.connectSignal('DisplayedChatMsg', 
+				Lang.bind(this, this._onDisplayedMessage));
+		this._messageDisplayedId = 0;
+	},
 
-ChatroomSource.prototype._onDisplayedChatMessage = function(emitter, something, details){
-	var account = details[0];
-	var author = details[1];
-	var text = details[2];
-	var conversation = details[3];
-	var flag = details[4];
-	if (text && (this._conversation == conversation)) {
-		let direction = null;
-		if (flag == 1) {
-			direction = TelepathyClient.NotificationDirection.SENT;
-		} else if (flag == 2) {
-			direction = TelepathyClient.NotificationDirection.RECEIVED;
+	_async_find_buddy : function(buddy, something, author) {
+		let proxy = this._client.proxy();
+		if(buddy==undefined){
+			this._async_set_cb_name(author, "", author);
+			return;
 		}
+		proxy.PurpleBuddyGetAliasRemote(buddy, Lang.bind(this, this._async_set_cb_name, author));
+	},
 
-		let message = wrappedText(text, author, null, direction);
+	_async_set_cb_name : function(alias, something, author) {
+		this._cbNames[author] = alias;
+		this._onDisplayedMessage("","",this._cbBlockedMsg[author]);
+		this._cbBlockedMsg[author] = null;
+	},
 
-		if (direction != null) {
-			this._notification.appendMessage(message, false);
+	_onDisplayedMessage : function(emitter, something, details) {
+		var account = details[0];
+		var author = details[1];
+		var text = details[2];
+		var conversation = details[3];
+		var flag = details[4];
+		if(this._cbNames[author] == undefined){
+			let proxy = this._client.proxy();
+			this._cbBlockedMsg[author] = details;
+			proxy.PurpleFindBuddyRemote(this._account, author, Lang.bind(this, this._async_find_buddy, author));
+			return;
 		}
+		if (text && (this._conversation == conversation)) {
+			let direction = null;
+			if (flag == 1) {
+				direction = TelepathyClient.NotificationDirection.SENT;
+			} else if (flag == 2) {
+				direction = TelepathyClient.NotificationDirection.RECEIVED;
+			}
 
-		if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
-			this._addPendingMessage(message);
-			this.notify();
-		} else if (direction == TelepathyClient.NotificationDirection.SENT) {
-			this._flushPendingMessages();
-			this.notify();
+			let message = wrappedText('['+this._cbNames[author]+']: '+text, author, null, direction);
+
+			if (direction != null) {
+				this._notification.appendMessage(message, false);
+			}
+
+			if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
+				this._addPendingMessage(message);
+				this.notify();
+			} else if (direction == TelepathyClient.NotificationDirection.SENT) {
+				this._flushPendingMessages();
+				this.notify();
+			}
 		}
+	},
+
+	_destroy : function() {
+		let proxy = this._client.proxy();
+		proxy.disconnectSignal(this._chatmsgDisplayedId);
+		Source.prototype.destroy.call(this)
 	}
 }
 
-ChatroomSource.prototype.destroy = function(){
-	let proxy = this._client.proxy();
-	proxy.disconnectSignal(this._chatmsgDisplayedId);
-	Source.prototype.destroy.call(this)
-}
 /*
 ChatroomSource.prototype = {
     __proto__: MessageTray.Source.prototype,
