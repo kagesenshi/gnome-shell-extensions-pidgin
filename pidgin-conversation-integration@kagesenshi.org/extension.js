@@ -591,7 +591,8 @@ ChatroomSource.prototype = {
 
 	_async_find_buddy : function(buddy, something, author) {
 		let proxy = this._client.proxy();
-		if(buddy==undefined){
+		//if we didn't find the buddy, the cb is not our friends, so it's name is display name
+		if(buddy==0){
 			this._async_set_cb_name(author, "", author);
 			return;
 		}
