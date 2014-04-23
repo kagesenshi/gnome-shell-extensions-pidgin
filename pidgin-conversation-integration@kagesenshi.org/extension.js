@@ -242,7 +242,6 @@ Source.prototype = {
     __proto__: MessageTray.Source.prototype,
 
     _init: function(client, account, author, initialMessage, conversation, flag) {
-
         let proxy = client.proxy();
         this._client = client;
         this._author = author;
@@ -255,6 +254,7 @@ Source.prototype = {
         this._presence = 'online';
         this._chatState = Tp.ChannelChatState.ACTIVE;
         this._pendingMessages = [];
+		  this._isChat = false;
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
     },
 
@@ -268,7 +268,10 @@ Source.prototype = {
     _async_set_author_buddy: function (author_buddy) {
         let proxy = this._client.proxy();
         this._author_buddy = author_buddy;
-        proxy.PurpleConvImRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
+		  if(this._isChat)
+			  proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
+		  else
+			  proxy.PurpleConvImRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
     },
 
 	 /**conversation_id : is a conversation_im or conversation_chat **/
@@ -312,10 +315,8 @@ Source.prototype = {
 		  this._onDisplayedMessage("","",this._blockedMsg);
 		  this._blockedMsg = null;
 
-        this._buddyStatusChangeId = proxy.connectSignal('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
-        this._buddySignedOffId = proxy.connectSignal('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
-        this._buddySignedOnId = proxy.connectSignal('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
-        this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedMessage));
+		  this._connectSignals();
+
         this._deleteConversationId = proxy.connectSignal('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
         this._conversationUpdatedId = proxy.connectSignal('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
 
@@ -324,11 +325,7 @@ Source.prototype = {
 
     destroy: function () {
         let proxy = this._client.proxy();
-        proxy.disconnectSignal(this._buddyStatusChangeId);
-        proxy.disconnectSignal(this._buddySignedOffId);
-        proxy.disconnectSignal(this._buddySignedOnId);
         proxy.disconnectSignal(this._deleteConversationId);
-        proxy.disconnectSignal(this._messageDisplayedId);
         proxy.disconnectSignal(this._conversationUpdatedId);
         MessageTray.Source.prototype.destroy.call(this);
     },
@@ -422,118 +419,18 @@ Source.prototype = {
     respond: function(text) {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
-        proxy.PurpleConvImSendRemote(this._conversation_id, _text);
+		  if(this._isChat)
+			  proxy.PurpleConvChatSendRemote(this._conversation_id, _text);
+		  else
+			  proxy.PurpleConvImSendRemote(this._conversation_id, _text);
         this._flushAttention();
     },
-
-    _onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
-        if (!this.title) return;
-
-        let self = this;
-
-        let proxy = this._client.proxy();
-
-        if (buddy != this._author_buddy) return;
-
-        let presenceInfo = {};
-
-        let notify_presence = function () {
-
-            let presence = presenceInfo.presence;
-            let message = presenceInfo.message;
-            if (self._presence == presence) return;
-    
-            let title = self.title;
-            let presenceMessage, shouldNotify;
-            if (presence == "away") {
-                presenceMessage = _("%s is away.").format(title);
-            } else if (presence == "available") {
-                presenceMessage = _("%s is available.").format(title);
-            } else if (presence == "dnd") {
-                presenceMessage = _("%s is busy.").format(title);
-            } else {
-                return;
-            }
-    
-            self._presence = presence;
-    
-            if (message)
-                presenceMessage += ' <i>(' + _fixText(message) + ')</i>';
-    
-            self._notification.appendPresence(presenceMessage, false);
-        };
- 
-        let set_presence_message = function (message) {
-            presenceInfo.message = message;
-            notify_presence();
-        };
-        let set_presence = function (presence) {
-            presenceInfo.presence = presence;
-            proxy.PurpleStatusGetAttrStringRemote(new_status_id, 'message', set_presence_message);
-        };
-
-        proxy.PurpleStatusGetIdRemote(new_status_id, set_presence);
-
-    },
-
-    _onBuddySignedOff: function(emitter, buddy) {
-        if (buddy != this._author_buddy) return;
-
-        let shouldNotify = this._presence != 'offline';
-        let presenceMessage = _("%s is offline.").format(this.title);
-        this._notification.appendPresence(presenceMessage, shouldNotify);
-        this._presence = 'offline';
-        if (shouldNotify) 
-            this.notify();
-    },
-
-    _onBuddySignedOn: function(emitter, buddy) {
-        if (buddy != this._author_buddy) return;
-
-        let shouldNotify = this._presence == 'offline';
-        let presenceMessage = _("%s is online.").format(this.title);
-        this._notification.appendPresence(presenceMessage, shouldNotify);
-        this._presence = 'online';
-        if (shouldNotify) 
-            this.notify();
-    },
-
 
     _onDeleteConversation: function(emitter, conversation) {
         if (conversation != this._conversation) return;
         this.destroy();
     },
 
-    _onDisplayedMessage: function(emitter, something, details) {
-        var account = details[0];
-        var author = details[1];
-        var text = details[2];
-        var conversation = details[3];
-        var flag = details[4];
-        if (text && (this._conversation == conversation)) {
-            let direction = null;
-            if (flag == 1) {
-                direction = TelepathyClient.NotificationDirection.SENT;
-            } else if (flag == 2) {
-                direction = TelepathyClient.NotificationDirection.RECEIVED;
-            }
-
-            let message = wrappedText(text, author, null, direction);
-
-            if (direction != null) {
-                this._notification.appendMessage(message, false);
-            }
-
-            if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
-                this._addPendingMessage(message);
-                this.notify();
-            } else if (direction == TelepathyClient.NotificationDirection.SENT) {
-                this._flushPendingMessages();
-                this.notify();
-            }
-        }
-
-    },
 
     _addPersistentNotification: function() {
       //UserMenuButton._iconBox.add_style_class_name('pidgin-notification');
@@ -569,6 +466,140 @@ Source.prototype = {
 }
 
 
+function ImSource(client, account, author, initialMessage, conversation, flag) {
+	this._init(client, account, author, initialMessage, conversation, flag);
+}
+
+ImSource.prototype = {
+	__proto__ : Source.prototype,
+
+	_init : function(client, account, author, initialMessage, conversation, flag) {
+		Source.prototype._init.call(this, client, account, author, initialMessage, conversation, flag);
+		this._isChat = false;
+	},
+
+	_connectSignals : function() {
+		let proxy = this._client.proxy();
+		this._buddyStatusChangeId = proxy.connectSignal('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
+		this._buddySignedOffId = proxy.connectSignal('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
+		this._buddySignedOnId = proxy.connectSignal('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
+		this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedMessage));
+	},
+
+	destroy : function() {
+		let proxy = this._client.proxy();
+		proxy.disconnectSignal(this._buddyStatusChangeId);
+		proxy.disconnectSignal(this._buddySignedOffId);
+		proxy.disconnectSignal(this._buddySignedOnId);
+		proxy.disconnectSignal(this._messageDisplayedId);
+		Source.prototype.destroy.call(this);
+	},
+
+	_onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
+		if (!this.title) return;
+
+		let self = this;
+
+		let proxy = this._client.proxy();
+
+		if (buddy != this._author_buddy) return;
+
+		let presenceInfo = {};
+
+		let notify_presence = function () {
+
+			let presence = presenceInfo.presence;
+			let message = presenceInfo.message;
+			if (self._presence == presence) return;
+
+			let title = self.title;
+			let presenceMessage, shouldNotify;
+			if (presence == "away") {
+				presenceMessage = _("%s is away.").format(title);
+			} else if (presence == "available") {
+				presenceMessage = _("%s is available.").format(title);
+			} else if (presence == "dnd") {
+				presenceMessage = _("%s is busy.").format(title);
+			} else {
+				return;
+			}
+
+			self._presence = presence;
+
+			if (message)
+				presenceMessage += ' <i>(' + _fixText(message) + ')</i>';
+
+			self._notification.appendPresence(presenceMessage, false);
+		};
+
+		let set_presence_message = function (message) {
+			presenceInfo.message = message;
+			notify_presence();
+		};
+		let set_presence = function (presence) {
+			presenceInfo.presence = presence;
+			proxy.PurpleStatusGetAttrStringRemote(new_status_id, 'message', set_presence_message);
+		};
+
+		proxy.PurpleStatusGetIdRemote(new_status_id, set_presence);
+
+	},
+
+	_onBuddySignedOff: function(emitter, buddy) {
+		if (buddy != this._author_buddy) return;
+
+		let shouldNotify = this._presence != 'offline';
+		let presenceMessage = _("%s is offline.").format(this.title);
+		this._notification.appendPresence(presenceMessage, shouldNotify);
+		this._presence = 'offline';
+		if (shouldNotify) 
+			this.notify();
+	},
+
+	_onBuddySignedOn: function(emitter, buddy) {
+		if (buddy != this._author_buddy) return;
+
+		let shouldNotify = this._presence == 'offline';
+		let presenceMessage = _("%s is online.").format(this.title);
+		this._notification.appendPresence(presenceMessage, shouldNotify);
+		this._presence = 'online';
+		if (shouldNotify) 
+			this.notify();
+	},
+
+	_onDisplayedMessage: function(emitter, something, details) {
+		var account = details[0];
+		var author = details[1];
+		var text = details[2];
+		var conversation = details[3];
+		var flag = details[4];
+		if (text && (this._conversation == conversation)) {
+			let direction = null;
+			if (flag == 1) {
+				direction = TelepathyClient.NotificationDirection.SENT;
+			} else if (flag == 2) {
+				direction = TelepathyClient.NotificationDirection.RECEIVED;
+			}
+
+			let message = wrappedText(text, author, null, direction);
+
+			if (direction != null) {
+				this._notification.appendMessage(message, false);
+			}
+
+			if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
+				this._addPendingMessage(message);
+				this.notify();
+			} else if (direction == TelepathyClient.NotificationDirection.SENT) {
+				this._flushPendingMessages();
+				this.notify();
+			}
+		}
+
+	},
+
+}
+
 function ChatroomSource(client, account, author, initialMessage, conversation, flag) {
 	this._init(client, account, author, initialMessage, conversation, flag);
 }
@@ -579,21 +610,19 @@ ChatroomSource.prototype = {
 		Source.prototype._init.call(this, client, account, author, initialMessage, conversation, flag);
 		this._cbNames = {};
 		this._cbBlockedMsg = {};
+		this._isChat = true;
 	},
 
-	_async_set_author_buddy: function (author_buddy) {
+	_connectSignals : function() {
 		let proxy = this._client.proxy();
-		this._author_buddy = author_buddy;
-		proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
+		this._messageDisplayedId = proxy.connectSignal('DisplayedChatMsg', 
+				Lang.bind(this, this._onDisplayedMessage));
 	},
 
-	_start: function() {
-		Source.prototype._start.call(this);
+	_destroy : function() {
 		let proxy = this._client.proxy();
 		proxy.disconnectSignal(this._messageDisplayedId);
-		this._chatmsgDisplayedId = proxy.connectSignal('DisplayedChatMsg', 
-				Lang.bind(this, this._onDisplayedMessage));
-		this._messageDisplayedId = 0;
+		Source.prototype.destroy.call(this);
 	},
 
 	_async_find_buddy : function(buddy, something, author) {
@@ -651,18 +680,6 @@ ChatroomSource.prototype = {
 		}
 	},
 
-	respond: function(text) {
-		let proxy = this._client.proxy();
-		let _text = GLib.markup_escape_text(text, -1);
-		proxy.PurpleConvChatSendRemote(this._conversation_id, _text);
-		this._flushAttention();
-	},
-
-	_destroy : function() {
-		let proxy = this._client.proxy();
-		proxy.disconnectSignal(this._chatmsgDisplayedId);
-		Source.prototype.destroy.call(this)
-	}
 }
 
 /*
@@ -797,7 +814,7 @@ PidginClient.prototype = {
         if (conversation) {
             let source = this._sources[conversation];
             if (!source) {
-                source = new Source(this, account, author, message, conversation, flag);
+                source = new ImSource(this, account, author, message, conversation, flag);
                 source.connect('destroy', Lang.bind(this, 
                     function() {
                         delete this._sources[conversation];
