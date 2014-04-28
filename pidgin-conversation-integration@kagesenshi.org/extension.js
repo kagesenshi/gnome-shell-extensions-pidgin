@@ -372,6 +372,7 @@ Source.prototype = {
         const PURPLE_CONV_UPDATE_UNSEEN = 4;
         if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
             this._flushPendingMessages();
+            this._removePersistentNotification();
         }
     },
 
@@ -551,12 +552,7 @@ Source.prototype = {
     _removePersistentNotification: function() {
       UserMenuButton._iconBox.remove_style_class_name('pidgin-notification');
     },
-
-    _onConversationUpdated: function(emitter, _conv, flags) {
-        if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
-          this._removePersistentNotification();
-        }
-    },
+    
     _addPendingMessage: function (message) {
         this._pendingMessages.push(message);
         this._updateCount();
