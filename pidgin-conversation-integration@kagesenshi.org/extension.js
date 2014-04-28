@@ -5,6 +5,8 @@
  *
  * Credits to the author of Gajim extension as this extension code was modified
  * from it.
+ * 
+ * Merges in code from the Pidgin Persistent Notification extension: https://github.com/githubnemo/Pidgin-Persistent-Notification/
  *
  */
 
@@ -178,39 +180,45 @@ function html_entity_decode (string, quote_style) {
     return tmp_str;
 }
 
-const DBus = imports.dbus;
+const Me = imports.misc.extensionUtils.getCurrentExtension();
+const DBusIface = Me.imports.dbus;
+const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 const Lang = imports.lang;
 const St = imports.gi.St;
 const Main = imports.ui.main;
 const MessageTray = imports.ui.messageTray;
 const Shell = imports.gi.Shell;
-const TelepathyClient = imports.ui.telepathyClient;
+const TelepathyClient = imports.ui.components.telepathyClient;
 const Tp = imports.gi.TelepathyGLib;
+const PURPLE_MESSAGE_SYSTEM = 0x4;
+const PURPLE_CONV_UPDATE_UNSEEN = 4;
+const ICON_SIZE = MessageTray.Source.prototype.SOURCE_ICON_SIZE;
 
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
+//let UserMenuButton = imports.ui.main.panel.statusArea.userMenu;
 
 function wrappedText(text, sender, timestamp, direction) {
     let currentTime = (Date.now() / 1000);
-	let type = Tp.ChannelTextMessageType.NORMAL;
+    let type = Tp.ChannelTextMessageType.NORMAL;
 
     if (timestamp == null) {
         timestamp = currentTime;
     }
-	
-	text = _fixText(text);
-	if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
-		text = text.substr(4);
-		type = Tp.ChannelTextMessageType.ACTION;
-	}
+
+    text = _fixText(text);
+    if (text.substr(0, 3) == '/me' && direction != TelepathyClient.NotificationDirection.SENT) {
+        text = text.substr(4);
+        type = Tp.ChannelTextMessageType.ACTION;
+    }
 
     return {
         text: text,
-		messageType: type,
-        sender: sender,
-        timestamp: timestamp,
-        direction: direction
+            messageType: type,
+            sender: sender,
+            timestamp: timestamp,
+            direction: direction
     };
 }
 
@@ -220,7 +228,7 @@ function _fixText(text) {
     _text = _text.replace(/&lt;/g, "<");
     _text = _text.replace(/&gt;/g, ">");
     _text = _text.replace(/&apos;/g, "'");
-    _text = _text.replace(/&quot;/g, "\"")
+    _text = _text.replace(/&quot;/g, "\"");
     _text = _text.replace(/&amp;/g, "&");
 
     return _text;
@@ -234,7 +242,6 @@ Source.prototype = {
     __proto__: MessageTray.Source.prototype,
 
     _init: function(client, account, author, initialMessage, conversation, flag) {
-
         let proxy = client.proxy();
         this._client = client;
         this._author = author;
@@ -242,51 +249,43 @@ Source.prototype = {
         this._authors[author] = true;
         this._account = account;
         this._conversation = conversation;
-        this._initialMessage = initialMessage;
-        this._initialFlag = flag;
+        this._blockedMsg = [account, author, initialMessage, conversation, flag];
         this._iconUri = null;
         this._presence = 'online';
-        this.isChat = true;
-        this._notification = new TelepathyClient.ChatNotification(this);
-        this._notification.setUrgency(MessageTray.Urgency.HIGH);
         this._chatState = Tp.ChannelChatState.ACTIVE;
         this._pendingMessages = [];
+        this._isChat = false;
         proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
     },
 
-    _async_set_author_buddy: function (author_buddy) {
-        let proxy = this._client.proxy();
-        this._author_buddy = author_buddy;
-        proxy.PurpleConvImRemote(this._conversation, Lang.bind(this, this._async_set_conversation_im));
-    },
-
-    _async_set_conversation_im: function (conversation_im) {
-        let proxy = this._client.proxy();
-        this._conversation_im = conversation_im;
-        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
-    },
-
     _async_set_title: function (title) {
+        title = title[0];
         let proxy = this._client.proxy();
         this.title = _fixText(title);
-        proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
+        if(this._isChat)
+            proxy.PurpleConvChatRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
+        else
+            proxy.PurpleConvImRemote(this._conversation, Lang.bind(this, this._async_set_conversation_id));
     },
 
-    _async_get_icon: function (iconobj) {
-        let proxy = this._client.proxy();
-        if (iconobj) {
-            proxy.PurpleBuddyIconGetFullPathRemote(iconobj, Lang.bind(this, this._async_set_icon));
-        } else {
-            this._start();
-        }
+    /**conversation_id : is a conversation_im or conversation_chat **/
+    _async_set_conversation_id: function (conversation_id) {
+        this._conversation_id = conversation_id;
+        this._get_icon_begin();
     },
 
-    _async_set_icon: function (iconpath) {
-        this._iconUri = 'file://' + iconpath;
+    _get_icon_begin : function() {
+        this._get_icon_end();
+    },
+
+    _get_icon_end: function () {
         this._start();
     },
 
     _start: function () {
+
+        this._notification = new TelepathyClient.ChatNotification(this);
+        this._notification.setUrgency(MessageTray.Urgency.HIGH);
 
         let proxy = this._client.proxy();
         MessageTray.Source.prototype._init.call(this, this.title);
@@ -296,41 +295,25 @@ Source.prototype = {
         Main.messageTray.add(this);
         this.pushNotification(this._notification);
 
-        let direction = null;
-        if (this._initialFlag == 1) {
-            direction = TelepathyClient.NotificationDirection.SENT;
-        } else if (this._initialFlag == 2) {
-            direction = TelepathyClient.NotificationDirection.RECEIVED;
-        }
-
         this._notification.connect('clicked', Lang.bind(this, this._flushAttention));
         this.connect('summary-item-clicked', Lang.bind(this, this._flushAttention));
-        
-        let message = wrappedText(this._initialMessage, this._author, null, direction);
-        this._notification.appendMessage(message, false);
 
-        if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
-            this._addPendingMessage(message);
-        }
+        //display Blocked Message
+        this._onDisplayedMessage("","",this._blockedMsg);
+        this._blockedMsg = null;
 
-        this._buddyStatusChangeId = proxy.connect('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
-        this._buddySignedOffId = proxy.connect('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
-        this._buddySignedOnId = proxy.connect('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
-        this._messageDisplayedId = proxy.connect('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
-        this._deleteConversationId = proxy.connect('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
-        this._conversationUpdatedId = proxy.connect('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
+        this._connectSignals();
+
+        this._deleteConversationId = proxy.connectSignal('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
+        this._conversationUpdatedId = proxy.connectSignal('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
 
         this.notify();
     },
 
     destroy: function () {
         let proxy = this._client.proxy();
-        proxy.disconnect(this._buddyStatusChangeId);
-        proxy.disconnect(this._buddySignedOffId);
-        proxy.disconnect(this._buddySignedOnId);
-        proxy.disconnect(this._deleteConversationId);
-        proxy.disconnect(this._messageDisplayedId);
-        proxy.disconnect(this._conversationUpdatedId);
+        proxy.disconnectSignal(this._deleteConversationId);
+        proxy.disconnectSignal(this._conversationUpdatedId);
         MessageTray.Source.prototype.destroy.call(this);
     },
 
@@ -345,7 +328,8 @@ Source.prototype = {
                 pidginstate = 2;
             }
             // no idea why i didnt see typing state, but lets leave this here for now
-            proxy.PurpleConvImSetTypingStateRemote(this._conversation_im, pidginstate);
+            // xiehuc: disable here, for chatroom message
+            //proxy.PurpleConvImSetTypingStateRemote(this._conversation_id, pidginstate);
         }
     },
 
@@ -361,23 +345,47 @@ Source.prototype = {
         const PURPLE_CONV_UPDATE_UNSEEN = 4;
         if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
             this._flushPendingMessages();
+            this._removePersistentNotification();
         }
     },
 
     createNotificationIcon: function() {
         let iconBox = new St.Bin({ style_class: 'avatar-box' });
-        iconBox._size = this.ICON_SIZE;
+        iconBox._size = ICON_SIZE;
 
         if (!this._iconUri) {
             iconBox.child = new St.Icon({ icon_name: 'avatar-default',
-                                          icon_type: St.IconType.FULLCOLOR,
-                                          icon_size: iconBox._size });
+                //icon_type: St.IconType.FULLCOLOR,
+                icon_size: iconBox._size 
+            });
         } else {
             let textureCache = St.TextureCache.get_default();
-            iconBox.child = textureCache.load_uri_async(this._iconUri, iconBox._size, iconBox._size);
+            let scale = 1;
+            iconBox.child = textureCache.load_uri_async(this._iconUri, iconBox._size, iconBox._size, scale);
         }
         return iconBox;
     },
+
+    createIcon: function() {
+        let iconBox = new St.Bin();
+        iconBox.child = new St.Icon({ icon_name: 'avatar-default', icon_size: 24 });
+        return iconBox;
+    },
+
+    createSecondaryIcon: function() {
+        let iconBox = new St.Bin();
+        iconBox.child = new St.Icon({ style_class: 'secondary-icon' });
+        iconBox.child.icon_name = 'user-available';
+        return iconBox;
+    },
+
+    // /usr/share/gnome-shell/js/ui/messageTray.js
+    // /usr/share/gnome-shell/js/ui/components/telepathyClient.js
+    getSecondaryIcon: function() {
+        let iconName = 'user-available';
+        return new Gio.ThemedIcon({ name: iconName });
+    },
+
 
     open: function(notification) {
         let proxy = this._client.proxy();
@@ -390,7 +398,7 @@ Source.prototype = {
     },
 
     _async_notify: function (stats) {
-        if (!stats) {
+        if (!stats || stats == 0) {
             this._notification.scrollTo(St.Side.BOTTOM);
             MessageTray.Source.prototype.notify.call(this, this._notification);
         }
@@ -399,8 +407,105 @@ Source.prototype = {
     respond: function(text) {
         let proxy = this._client.proxy();
         let _text = GLib.markup_escape_text(text, -1);
-        proxy.PurpleConvImSendRemote(this._conversation_im, _text);
+        if(this._isChat)
+            proxy.PurpleConvChatSendRemote(this._conversation_id, _text);
+        else
+            proxy.PurpleConvImSendRemote(this._conversation_id, _text);
         this._flushAttention();
+    },
+
+    _onDeleteConversation: function(emitter, conversation) {
+        if (conversation != this._conversation) return;
+        this.destroy();
+    },
+
+
+    _addPersistentNotification: function() {
+        //UserMenuButton._iconBox.add_style_class_name('pidgin-notification');
+    },
+
+    _removePersistentNotification: function() {
+        //UserMenuButton._iconBox.remove_style_class_name('pidgin-notification');
+    },
+
+    /*
+       _onConversationUpdated: function(emitter, _conv, flags) {
+       if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
+       this._removePersistentNotification();
+       }
+       },
+       */
+    _addPendingMessage: function (message) {
+        this._pendingMessages.push(message);
+        this._updateCount();
+        this._addPersistentNotification();
+    },
+
+    _updateCount: function () {
+        //this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
+        //this.countUpdated();
+    },
+
+    _flushPendingMessages: function() {
+        this._pendingMessages = [];
+        this._updateCount();
+    }
+
+}
+
+
+function ImSource(client, account, author, initialMessage, conversation, flag) {
+    this._init(client, account, author, initialMessage, conversation, flag);
+}
+
+ImSource.prototype = {
+    __proto__ : Source.prototype,
+
+    _init : function(client, account, author, initialMessage, conversation, flag) {
+        Source.prototype._init.call(this, client, account, author, initialMessage, conversation, flag);
+        this._isChat = false;
+    },
+
+    _connectSignals : function() {
+        let proxy = this._client.proxy();
+        this._buddyStatusChangeId = proxy.connectSignal('BuddyStatusChanged', Lang.bind(this, this._onBuddyStatusChange));
+        this._buddySignedOffId = proxy.connectSignal('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
+        this._buddySignedOnId = proxy.connectSignal('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
+        this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedMessage));
+    },
+
+    destroy : function() {
+        let proxy = this._client.proxy();
+        proxy.disconnectSignal(this._buddyStatusChangeId);
+        proxy.disconnectSignal(this._buddySignedOffId);
+        proxy.disconnectSignal(this._buddySignedOnId);
+        proxy.disconnectSignal(this._messageDisplayedId);
+        Source.prototype.destroy.call(this);
+    },
+
+    _get_icon_begin : function() {
+        let proxy = this._client.proxy();
+        proxy.PurpleFindBuddyRemote(this._account, this._author, Lang.bind(this, this._async_set_author_buddy))
+    },
+
+    _async_set_author_buddy: function (author_buddy) {
+        let proxy = this._client.proxy();
+        this._author_buddy = author_buddy;
+        proxy.PurpleBuddyGetIconRemote(this._author_buddy, Lang.bind(this, this._async_get_icon));
+    },
+
+    _async_get_icon: function(iconobj) {
+        let proxy = this._client.proxy();
+        if (iconobj && iconobj != 0) 
+            proxy.PurpleBuddyIconGetFullPathRemote(iconobj, Lang.bind(this, this._async_get_icon_path));
+        else
+            this._get_icon_end();
+    },
+
+    _async_get_icon_path: function(iconpath) {
+        if(iconpath)
+            this._iconUri = 'file://' + iconpath;
+        this._get_icon_end();
     },
 
     _onBuddyStatusChange: function (emitter, buddy, old_status_id, new_status_id) {
@@ -419,7 +524,7 @@ Source.prototype = {
             let presence = presenceInfo.presence;
             let message = presenceInfo.message;
             if (self._presence == presence) return;
-    
+
             let title = self.title;
             let presenceMessage, shouldNotify;
             if (presence == "away") {
@@ -431,15 +536,15 @@ Source.prototype = {
             } else {
                 return;
             }
-    
+
             self._presence = presence;
-    
+
             if (message)
                 presenceMessage += ' <i>(' + _fixText(message) + ')</i>';
-    
+
             self._notification.appendPresence(presenceMessage, false);
         };
- 
+
         let set_presence_message = function (message) {
             presenceInfo.message = message;
             notify_presence();
@@ -475,13 +580,12 @@ Source.prototype = {
             this.notify();
     },
 
-    _onDeleteConversation: function(emitter, conversation) {
-        if (conversation != this._conversation) return;
-        this.destroy();
-    },
-
-    _onDisplayedImMessage: function(emitter, account, author, text, conversation, flag) {
-
+    _onDisplayedMessage: function(emitter, something, details) {
+        var account = details[0];
+        var author = details[1];
+        var text = details[2];
+        var conversation = details[3];
+        var flag = details[4];
         if (text && (this._conversation == conversation)) {
             let direction = null;
             if (flag == 1) {
@@ -507,13 +611,23 @@ Source.prototype = {
 
     },
 
+    _addPersistentNotification: function() {
+      //UserMenuButton._iconBox.add_style_class_name('pidgin-notification');
+    },
+
+    _removePersistentNotification: function() {
+      //UserMenuButton._iconBox.remove_style_class_name('pidgin-notification');
+    },
+    
     _addPendingMessage: function (message) {
         this._pendingMessages.push(message);
         this._updateCount();
+        this._addPersistentNotification();
     },
 
     _updateCount: function () {
-        this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
+        //this._setCount(this._pendingMessages.length, this._pendingMessages.length > 0);
+        //this.countUpdated();
     },
 
     _flushPendingMessages: function() {
@@ -523,114 +637,124 @@ Source.prototype = {
 
 }
 
-
 function ChatroomSource(client, account, author, initialMessage, conversation, flag) {
     this._init(client, account, author, initialMessage, conversation, flag);
 }
-
 ChatroomSource.prototype = {
-    __proto__: MessageTray.Source.prototype,
+    __proto__: Source.prototype,
 
-    _init : function (client, account, author, initialMessage, conversation, flag) {
-        this._client = client;
-        this._author = author;
-        this._account = account;
-        this._conversation = conversation;
-        this._initialMessage = initialMessage;
-        this._initialFlag = flag;
-
-        let proxy = client.proxy();
-        proxy.PurpleConversationGetTitleRemote(this._conversation, Lang.bind(this, this._async_set_title));
+    _init: function(client, account, author, initialMessage, conversation, flag) {
+        Source.prototype._init.call(this, client, account, author, initialMessage, conversation, flag);
+        this._cbNames = {};
+        this._cbBlockedMsg = {};
+        this._isChat = true;
+        this._iconCacheDir = null;
     },
 
-    _async_set_title: function(title) {
+    _connectSignals : function() {
         let proxy = this._client.proxy();
-        this.title = _fixText(title);
-        this._start();
+        this._messageDisplayedId = proxy.connectSignal('DisplayedChatMsg', 
+                Lang.bind(this, this._onDisplayedMessage));
     },
 
-    _start: function () {
+    _destroy : function() {
         let proxy = this._client.proxy();
-        MessageTray.Source.prototype._init.call(this, this.title);
-        this._setSummaryIcon(this.createNotificationIcon());
-        Main.messageTray.add(this);
-        this.notifyMessage(this._initialMessage);
+        proxy.disconnectSignal(this._messageDisplayedId);
+        Source.prototype.destroy.call(this);
     },
 
-    notifyMessage: function (message) {
-        let banner = '<' + _fixText(this._author) + '> ' + _fixText(message);
-        let notification = new MessageTray.Notification(this, this.title, banner, {});
-        this.pushNotification(notification);
-        notification.connect('destroy', Lang.bind(this, this.destroy));
-        this.notify(notification);
-    },
-
-    createNotificationIcon: function() {
-        let iconBox = new St.Bin({ style_class: 'avatar-box' });
-        iconBox._size = this.ICON_SIZE;
-
-        iconBox.child = new St.Icon({ icon_name: 'pidgin',
-                                    icon_type: St.IconType.FULLCOLOR,
-                                    icon_size: iconBox._size });
-        return iconBox;
-    },
-
-    open: function(notification) {
+    _get_icon_begin: function() {
         let proxy = this._client.proxy();
-        proxy.PurpleConversationPresentRemote(this._conversation);
-    }
+        proxy.PurpleBuddyIconsGetCacheDirRemote(Lang.bind(this, this._async_get_icon_cache_dir));
+    },
+
+    _async_get_icon_cache_dir: function(dir) {
+        let proxy = this._client.proxy();
+        this._iconCacheDir = dir;
+        if(!dir){
+            this._get_icon_end();
+            return;
+        }
+        proxy.PurpleConversationGetNameRemote(this._conversation, Lang.bind(this, this._async_get_chat_name));
+    },
+
+    _async_get_chat_name: function(chat_name) {
+        let proxy = this._client.proxy();
+        proxy.PurpleBlistFindChatRemote(this._account, chat_name[0], Lang.bind(this, this._async_get_chat_node));
+    },
+
+    _async_get_chat_node: function(chat_node) {
+        let proxy = this._client.proxy();
+        proxy.PurpleBlistNodeGetStringRemote(chat_node, "custom_buddy_icon", Lang.bind(this, this._get_icon_file_name));
+    },
+
+    _get_icon_file_name: function(file_name) {
+        if(file_name && file_name != ""){
+            this._iconUri = "file://"+this._iconCacheDir+"/"+file_name;
+            log(this._iconUri);
+        }
+        this._get_icon_end();
+    },
+
+    _async_find_buddy : function(buddy, something, author) {
+        let proxy = this._client.proxy();
+        //if we didn't find the buddy, the cb is not our friends, so it's name is display name
+        if(buddy==0){
+            this._async_set_cb_name(author, "", author);
+            return;
+        }
+        proxy.PurpleBuddyGetAliasRemote(buddy, Lang.bind(this, this._async_set_cb_name, author));
+    },
+
+    _async_set_cb_name : function(alias, something, author) {
+        this._cbNames[author] = alias;
+        this._onDisplayedMessage("","",this._cbBlockedMsg[author]);
+        this._cbBlockedMsg[author] = null;
+    },
+
+    _onDisplayedMessage : function(emitter, something, details) {
+        var account = details[0];
+        var author = details[1];
+        var text = details[2];
+        var conversation = details[3];
+        var flag = details[4];
+        var author_nick = null;
+
+        if(flag==2 && this._cbNames[author] == undefined){
+            let proxy = this._client.proxy();
+            this._cbBlockedMsg[author] = details;
+            proxy.PurpleFindBuddyRemote(this._account, author, Lang.bind(this, this._async_find_buddy, author));
+            return;
+        }
+        if (text && (this._conversation == conversation)) {
+            let direction = null;
+            if (flag == 1) {
+                direction = TelepathyClient.NotificationDirection.SENT;
+                author_nick = "me";
+            } else if (flag == 2) {
+                direction = TelepathyClient.NotificationDirection.RECEIVED;
+                author_nick = this._cbNames[author];
+            }
+
+            let message = wrappedText('['+author_nick+']: '+text, author, null, direction);
+
+            if (direction != null) {
+                this._notification.appendMessage(message, false);
+            }
+
+            if (direction == TelepathyClient.NotificationDirection.RECEIVED) {
+                this._addPendingMessage(message);
+                this.notify();
+            } else if (direction == TelepathyClient.NotificationDirection.SENT) {
+                this._flushPendingMessages();
+                this.notify();
+            }
+        }
+    },
+
 }
 
-
-const PidginIface = {
-    name: 'im.pidgin.purple.PurpleInterface',
-    properties: [],
-    methods: [
-        {name: 'PurpleGetIms', inSignature: '', outSignature: 'ai'},
-        {name: 'PurpleAccountsGetAllActive', inSignature: '', outSignature: 'ai'},
-        {name: 'PurpleConversationGetType', inSignature: 'i', outSignature: 'u'},
-        {name: 'PurpleFindBuddies', inSignature: 'is', outSignature: 'ai'},
-        {name: 'PurpleFindBuddy', inSignature: 'is', outSignature: 'i'},
-        {name: 'PurpleAccountGetAlias', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleAccountGetNameForDisplay', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleBuddyGetAlias', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleBuddyGetName', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleStatusGetId', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleStatusGetAttrString', inSignature: 'is', outSignature: 's'},
-        {name: 'PurpleBuddyIconGetFullPath', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleBuddyGetIcon', inSignature: 'i', outSignature: 'i'},
-        {name: 'PurpleConvImSend', inSignature: 'is', outSignature: ''},
-        {name: 'PurpleConvChatSend', inSignature: 'is', outSignature: ''},
-        {name: 'PurpleConvIm', inSignature: 'i', outSignature: 'i'},
-        {name: 'PurpleConvImSetTypingState', inSignature:'ii', outSignature: ''},
-        {name: 'PurpleConvChat', inSignature: 'i', outSignature: 'i'},
-        {name: 'PurpleConvImGetIcon', inSignature: 'i', outSignature: 'i'},
-        {name: 'PurpleConversationGetName', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleConversationGetAccount', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleConversationGetMessageHistory', inSignature: 'i', outSignature: 'ai'},
-        {name: 'PurpleConversationMessageGetMessage', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleConversationGetTitle', inSignature: 'i', outSignature: 's'},
-        {name: 'PurpleConversationHasFocus', inSignature: 'i', outSignature: 'b'},
-        {name: 'PurpleConversationUpdate', inSignature: 'ii', outSignature: ''},
-        {name: 'PurpleConversationPresent', inSignature: 'i', outSignature: ''}
-    ],
-    signals: [
-        {name: 'ReceivedImMsg', inSignature: 'issiu'},
-        {name: 'ReceivedChatMsg', inSignature: 'issiu'},
-        {name: 'DisplayedImMsg', inSignature: 'issiu'},
-        {name: 'DisplayedChatMsg', inSignature: 'issiu'},
-        {name: 'SentImMsg', inSignature: 'iss'},
-        {name: 'SentChatMsg', inSignature: 'iss'},
-        {name: 'BuddyStatusChanged', inSignature: 'iii'}, // ????
-        {name: 'BuddySignedOff', inSignature: 'i'},
-        {name: 'BuddySignedOn', inSignature: 'i'},
-        {name: 'DeletingConversation', inSignature: 'i'},
-        {name: 'ConversationCreated', inSignature: 'i'},
-        {name: 'ConversationUpdated', inSignature: 'ii'}
-    ]
-};
-
-let Pidgin = DBus.makeProxyClass(PidginIface);
+const Pidgin = Gio.DBusProxy.makeProxyWrapper(DBusIface.PidginIface);
 
 function PidginClient() {
     this._init();
@@ -640,27 +764,41 @@ PidginClient.prototype = {
     _init: function() {
         this._sources = {};
         this._chatroomsources = {};
-        this._proxy = new Pidgin(DBus.session, 'im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject');
+        this._proxy = new Pidgin(Gio.DBus.session, 'im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject');
         this._displayedImMsgId = 0;
         this._displayedChatMsgId = 0;
+        this._setAvailable = 0;
+        this._setUnavailable = 0;
     },
 
     enable: function() {
-        this._displayedImMsgId = this._proxy.connect('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
-        this._displayedChatMsgId = this._proxy.connect('DisplayedChatMsg', Lang.bind(this, this._chatroomMessageDisplayed));
+        this._displayedImMsgId = this._proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._messageDisplayed));
+        this._displayedChatMsgId = this._proxy.connectSignal('DisplayedChatMsg', Lang.bind(this, this._chatroomMessageDisplayed));
+        this._setAvailable = this._proxy.connectSignal('SignedOn', Lang.bind(this, this._onSignedOn));
+        this._setUnavailable = this._proxy.connectSignal('SignedOff', Lang.bind(this, this._onSignedOff));
     },
-    
+
     disable: function() {
         if (this._displayedImMsgId > 0) {
-            this._proxy.disconnect(this._displayedImMsgId);
+            this._proxy.disconnectSignal(this._displayedImMsgId);
             this._displayedImMsgId = 0;
         }
-        
+
         if (this._displayedChatMsgId > 0) {
-            this._proxy.disconnect(this._displayedChatMsgId);
+            this._proxy.disconnectSignal(this._displayedChatMsgId);
             this._displayedChatMsgId = 0;
         }
-        
+
+        if (this._setAvailable > 0) {
+            this._proxy.disconnectSignal(this._setAvailable);
+            this._setAvailable = 0;
+        }
+        if (this._setUnavailable > 0) {
+            this._proxy.disconnectSignal(this._setUnavailable);
+            this._setUnavailable = 0;
+        }
+
+
         for (let key in this._sources) {
             if (this._sources.hasOwnProperty(key))
                 this._sources[key].destroy();
@@ -671,60 +809,69 @@ PidginClient.prototype = {
         return this._proxy;
     },
 
-    _messageDisplayed: function(emitter, account, author, message, conversation, flag) {
+    _messageDisplayed: function(emitter, something, details) {
+
+        var account = details[0];
+        var author = details[1];
+        var message = details[2];
+        var conversation = details[3];
+        var flag = details[4];
+
         // only trigger on message received/message sent
-        if (flag != 2 && flag != 1) return;
+        if (flag != 2 && flag != 1) 
+        {
+            return;
+        }
 
         if (conversation) {
             let source = this._sources[conversation];
             if (!source) {
-                source = new Source(this, account, author, message, conversation, flag);
+                source = new ImSource(this, account, author, message, conversation, flag);
                 source.connect('destroy', Lang.bind(this, 
-                    function() {
-                        delete this._sources[conversation];
-                    }
-                ));
+                            function() {
+                                delete this._sources[conversation];
+                            }
+                            ));
             }
             this._sources[conversation] = source;
         }
     },
 
-    _chatroomMessageDisplayed: function(emitter, account, author, message, conversation, flag) {
-        if (flag != (2 | 32)) return;
+    _chatroomMessageDisplayed: function(emitter, something, details) {
+        var account = details[0];
+        var author = details[1];
+        var message = details[2];
+        var conversation = details[3];
+        var flag = details[4];
+        //send is 1, recv is 2, flag & 3 == 0 means nither send nor recv
+        if (flag & 3 == 0) return;
 
         if (conversation) {
             let source = this._chatroomsources[conversation];
             if (!source) {
                 source = new ChatroomSource(this, account, author, message, conversation, flag);
                 source.connect('destroy', Lang.bind(this,
-                    function() {
-                        delete this._chatroomsources[conversation];
-                    }
-                ));
-            } else {
-                source.notifyMessage(message);
+                            function() {
+                                delete this._chatroomsources[conversation];
+                            }
+                            ));
             }
             this._chatroomsources[conversation] = source;
         } 
+    },
+    _onSignedOn: function(emitter, connection) {
+        //UserMenuButton._iconBox.child = UserMenuButton._availableIcon;
+    }, 
+    _onSignedOff: function(emitter, connection) {
+        //UserMenuButton._iconBox.child = UserMenuButton._offlineIcon;
     }
 }
 
 function init(metaObject) {
     var LocalDir;
-
-    // gnome-shell 3.4
-    if ("metadata" in metaObject) {
-        LocalDir = metaObject.metadata.localedir;
-    }
-    // gnome-shell 3.2
-    else if ("localedir" in metaObject) {
-        LocalDir = metaObject.localedir;
-    }
-    // don't know what happends, hardcode it.
-    else {
-        LocalDir = "/usr/share/locale";
-    }
-
+    LocalDir = metaObject.metadata.localedir;
     imports.gettext.bindtextdomain('gnome-shell-extensions', LocalDir);
     return new PidginClient();
 }
+
+// vim: tabstop=4 softtabstop=4 shiftwidth=4 expandtab
