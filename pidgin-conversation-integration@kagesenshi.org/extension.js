@@ -197,7 +197,7 @@ const ICON_SIZE = MessageTray.Source.prototype.SOURCE_ICON_SIZE;
 
 const Gettext = imports.gettext.domain('gnome-shell-extensions');
 const _ = Gettext.gettext;
-let UserMenuButton = imports.ui.main.panel.statusArea.userMenu;
+//let UserMenuButton = imports.ui.main.panel.statusArea.userMenu;
 
 function wrappedText(text, sender, timestamp, direction) {
     let currentTime = (Date.now() / 1000);
@@ -327,7 +327,7 @@ Source.prototype = {
         this._buddySignedOffId = proxy.connectSignal('BuddySignedOff', Lang.bind(this, this._onBuddySignedOff));
         this._buddySignedOnId = proxy.connectSignal('BuddySignedOn', Lang.bind(this, this._onBuddySignedOn));
         this._messageDisplayedId = proxy.connectSignal('DisplayedImMsg', Lang.bind(this, this._onDisplayedImMessage));
-        this._conversationUpdated = proxy.connectSignal('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
+        //this._conversationUpdated = proxy.connectSignal('ConversationUpdated',Lang.bind(this, this._onConversationUpdated));
         this._deleteConversationId = proxy.connectSignal('DeletingConversation', Lang.bind(this, this._onDeleteConversation));
         this._conversationUpdatedId = proxy.connectSignal('ConversationUpdated', Lang.bind(this, this._onConversationUpdated));
 
@@ -393,9 +393,10 @@ Source.prototype = {
 
     createIcon: function() {
         let iconBox = new St.Bin();
-        iconBox.child = new St.Icon({ icon_name: 'avatar-default' });
+        iconBox.child = new St.Icon({ icon_name: 'avatar-default', icon_size: 24 });
         return iconBox;
     },
+
     createSecondaryIcon: function() {
         let iconBox = new St.Bin();
         iconBox.child = new St.Icon({ style_class: 'secondary-icon' });
@@ -545,18 +546,20 @@ Source.prototype = {
     },
 
     _addPersistentNotification: function() {
-      UserMenuButton._iconBox.add_style_class_name('pidgin-notification');
+      //UserMenuButton._iconBox.add_style_class_name('pidgin-notification');
     },
 
     _removePersistentNotification: function() {
-      UserMenuButton._iconBox.remove_style_class_name('pidgin-notification');
+      //UserMenuButton._iconBox.remove_style_class_name('pidgin-notification');
     },
 
+    /*
     _onConversationUpdated: function(emitter, _conv, flags) {
         if(flags & PURPLE_CONV_UPDATE_UNSEEN) {
           this._removePersistentNotification();
         }
     },
+    */
     _addPendingMessage: function (message) {
         this._pendingMessages.push(message);
         this._updateCount();
@@ -742,10 +745,10 @@ PidginClient.prototype = {
         } 
     },
     _onSignedOn: function(emitter, connection) {
-        UserMenuButton._iconBox.child = UserMenuButton._availableIcon;
+        //UserMenuButton._iconBox.child = UserMenuButton._availableIcon;
      }, 
     _onSignedOff: function(emitter, connection) {
-        UserMenuButton._iconBox.child = UserMenuButton._offlineIcon;
+        //UserMenuButton._iconBox.child = UserMenuButton._offlineIcon;
      }
 }
 
